@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+### Changed
+
+- Updated the Pi SDK family from 1.5.2 to 1.6.0: `pi-coding-agent`, `pi-ai`,
+  `pi-agent-core`, `pi-codemode`, `pi-mcp`, `pi-schema`, `pi-telemetry` and
+  `pi-tui`. The canary for 1.6.0 passed. Checked against the upstream
+  changelog and the published sources: the operations interfaces of `read`,
+  `grep` and `ls` keep their hooks and signatures, so the read confinement of
+  ADR 0013 needs no change and still decides every hook; the package-root
+  exports this server uses, the stop reasons, the prompt dispositions, the
+  names of the tools declared to the model, MCP naming (`isMcpToolName`
+  still reserves `mcp__` and the three resource tools), the SDK's settings
+  defaults and the Node requirement (`>=22.19.0`) are unchanged; the nine
+  providers with account sign-in and the bundled CLI's `auth login` and
+  `auth logout` are unchanged. The lockfile moves the family and three
+  transitive packages: `undici` 8.12.3 to 8.12.4 (upstream names six
+  advisories fixed there), `openai` 7.19.0 to 7.59.0 and `@google/genai`
+  2.21.0 to 2.32.0. Upstream changes operators may notice: GPT-6.2 Sol and
+  GPT-6.2 Astra are new on the `openai`, `azure` and `openai-codex`
+  providers and reject the thinking levels `none` and `minimal` (so `off` is
+  unavailable for them), and GPT-6.2 Sol is the SDK's default model there,
+  which does not affect profiles because each names its model; `find`
+  patterns with a `/` are relative to the search path (`src/*.ts` no longer
+  matches `pkg/src/a.ts`, `**/src/*.ts` does), a leading `./` is accepted,
+  and the descriptions of the `find` pattern and the `grep` glob parameters
+  that the model sees are reworded; more provider failures are retried
+  (`Connection closed.`, bare socket errors such as `ECONNRESET` and `EPIPE`,
+  and the 60-minute limit of an OpenAI Codex WebSocket, which now retries on
+  a fresh connection); after an abort, the tool calls of a batch that had not
+  started get an "Operation aborted" result instead of none; the SDK's `read`
+  no longer passes the abort signal to its file stream, which fixes the
+  uncaught `AbortError` that [#298](https://github.com/plagor44-ux/pi-session-mcp/issues/298)
+  works around (the server keeps its own `read` for coding sessions, see the
+  [amendment to ADR 0013](docs/adr/0013-hardened-read-only-profiles.md#amendment-2026-11-22-abort-handling-of-read-under-pi-sdk-160));
+  Qwen Token Plan providers read per-plan key variables first and keep the
+  shared ones as fallback. Live acceptance on 1.6.0 (Level 3) is not done yet.
+
 ## 0.22.2 — 2026-11-17
 
 Patch release: session history tests a tool call's own path, and the grep

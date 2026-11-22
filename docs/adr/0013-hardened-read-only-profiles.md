@@ -377,6 +377,35 @@ memory, and each concurrent command has its own 2 GiB scope. The other limits
 and residual risks of the amendment of 2026-10-30 are unchanged. Hosts need no
 change; the start probe and Doctor verify the new value.
 
+### Amendment 2026-11-22: abort handling of `read` under Pi SDK 1.6.0
+
+The move of the pin from 1.5.2 to 1.6.0 brings an upstream fix for the abort
+that the 2026-11-13 amendment (#298) works around. The SDK's default stream of
+`read` no longer receives the signal: the stream is created without one, the
+tool stops consuming it when its own signal aborts, and leaving its loop closes
+the handle. A stream created on an already aborted signal, which Node destroys
+with an uncaught `AbortError`, therefore cannot occur in the SDK's default
+operations. This was read from the 1.6.0 sources; no live abort against a real
+provider was run on it.
+
+Nothing else in the read confinement changes. `ReadOperations`,
+`GrepOperations` and `LsOperations` keep their hooks and signatures, so the
+decision of every hook in `confinedOperations` and `localReadOperations` stands
+and the typecheck guard passes unchanged. The server keeps its own `read`
+operations for coding sessions and its own guarded stream for confined
+sessions: the SDK calls the `createReadStream` hook it is given with the
+signal, and the hook refuses an aborted signal as before. Returning coding
+sessions to the built-in `read`, which the 2026-11-13 amendment names as an
+option once an SDK has the check, is not part of this update. It would change
+the code path of a coding session and wants its own decision and a live abort
+test, which acceptance does not yet cover.
+
+The `find` tool, which gets no operations from the server and relies on the
+first layer alone, now anchors a relative path pattern at its search path
+(`src/*.ts` no longer matches `pkg/src/a.ts`; `**/src/*.ts` does). The search
+path is still checked by the first layer before the tool runs, and the
+matching change does not widen what `find` can reach.
+
 ## Contract change and versioning
 
 The capabilities field `shell`, the start error `sandbox_unavailable` and the
