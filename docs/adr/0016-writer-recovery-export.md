@@ -336,6 +336,15 @@ Status after acceptance (Sprint 18, #222):
   added to collect and inspect; the recommendation above stays as
   defense in depth for the recovery implementation.
 
+## Amendment: read-only inspection
+
+`pi-session-mcp-setup --writer <name> --inspect` ([#317](https://github.com/plagor44-ux/pi-session-mcp/issues/317),
+[ADR 0012](0012-leased-writer-pool.md) amendment) reports whether a clone holds
+work that only it has, using the same inspection that refuses reset, recreate,
+finish and remove. Like recovery it never reads or writes `state.collected`'s
+digest beyond comparing it, so it cannot invalidate an earlier collection. An
+unmerged index stays `writer_inspect_failed`; the way out is still recovery.
+
 ## Evidence
 
 A development-only prototype (`eval/recovery/recover.ts`) runs the container

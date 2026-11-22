@@ -539,8 +539,8 @@ describe("guided run", () => {
   it("rejects invalid or unreadable answers with one path-free JSON report", async () => {
     const f = await fixture(); const output = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
     try {
-      expect(await runGuidedMain({ apply: true, answersPath: join(f.directory, "missing") }, true, new AbortController().signal, { dependencies: f.deps })).toBe(1);
-      expect(output).toHaveBeenCalledTimes(1); expect(JSON.parse(String(output.mock.calls[0]![0])).findings[0].code).toBe("answers_invalid");
+      expect(await runGuidedMain({ apply: true, answersPath: join(f.directory, "missing") }, true, new AbortController().signal, { dependencies: f.deps })).toBe(64);
+      expect(output).toHaveBeenCalledTimes(1); expect(JSON.parse(String(output.mock.calls[0]![0])).findings[0].code).toBe("answers_unreadable");
       expect(String(output.mock.calls[0]![0])).not.toContain(f.directory);
     } finally { output.mockRestore(); }
   });

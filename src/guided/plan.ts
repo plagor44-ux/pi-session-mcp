@@ -1,13 +1,14 @@
 import { isDeepStrictEqual } from "node:util";
 import type { ModeRequest } from "../setup-modes.js";
 import type { ContainerSettings } from "../execution-modes.js";
-import type { SetupTarget } from "../setup-result.js";
+import type { SetupChange, SetupTarget } from "../setup-result.js";
 import { ROLES, TIERS } from "../routing/config.js";
 import type { GuidedAnswers } from "./answers.js";
 
 export type GuidedPlanErrorCode = "container_profiles_invalid" | "config_change_not_allowed" | "profile_alias_conflict" | "workspace_alias_conflict" | "host_writes_not_accepted" | "routing_requires_history" | "default_profile_unknown" | "default_profile_conflict" | "routing_profile_conflict";
 export class GuidedPlanError extends Error {
-  constructor(readonly code: GuidedPlanErrorCode) { super(code); this.name = "GuidedPlanError"; }
+  /** `plan` accompanies `config_change_not_allowed`: the plan that the refusal withholds, so a dry run can still show it. */
+  constructor(readonly code: GuidedPlanErrorCode, readonly plan?: GuidedPlan) { super(code); this.name = "GuidedPlanError"; }
 }
 export interface GuidedPlan {
   nextConfig: Record<string, unknown>;
@@ -68,9 +69,43 @@ export function buildGuidedPlan(answers: GuidedAnswers, existing: { config?: unk
   const hasAssignments = answers.profiles.some((p) => p.tier !== null);
   const routingDocument = existing.routing === undefined && !hasAssignments && answers.routing.mode === "off" ? undefined : { ...oldRouting, mode: answers.routing.mode, ...(hasAssignments || oldRouting.tiers !== undefined ? { tiers } : {}), ...(hasAssignments || oldRouting.families !== undefined ? { families } : {}) };
   const routingChanged = !isDeepStrictEqual(existing.routing, routingDocument);
-  if (!answers.allowConfigChange && ((existing.config !== undefined && configChanged) || (existing.routing !== undefined && routingChanged))) throw new GuidedPlanError("config_change_not_allowed");
   const targets: SetupTarget[] = [];
   if (answers.clients.claudeCode) targets.push({ client: "claude-code", scope: "user", alias: "pi-session-mcp" });
   if (answers.clients.codex) targets.push({ client: "codex", scope: "user", alias: "pi-session-mcp" });
-  return { nextConfig, configChanged, newProfiles, routingDocument, routingChanged, modeRequests, targets };
+  const plan: GuidedPlan = { nextConfig, configChanged, newProfiles, routingDocument, routingChanged, modeRequests, targets };
+  if (!answers.allowConfigChange && ((existing.config !== undefined && configChanged) || (existing.routing !== undefined && routingChanged))) throw new GuidedPlanError("config_change_not_allowed", plan);
+  return plan;
+}
+
+/**
+ * Key paths at which a document gains or changes a value, down to `depth` segments: `executionProfiles.<alias>` stops at the alias,
+ * `history.enabled` at the field. A key that only the new document has and that holds an object is listed below its parent, as
+ * if the old document held an empty object there. Values never leave this function; paths consist of the keys that the plan itself
+ * sets (field names and aliases).
+ */
+function diffPaths(file: "config" | "routing", before: unknown, after: unknown, depth: number, prefix: readonly string[] = []): SetupChange[] {
+  const old = record(before), next = record(after), changes: SetupChange[] = [];
+  for (const key of new Set([...Object.keys(next), ...Object.keys(old)])) {
+    if (isDeepStrictEqual(old[key], next[key])) continue;
+    const path = [...prefix, key];
+    const nested = path.length < depth && next[key] !== null && typeof next[key] === "object" && !Array.isArray(next[key]) && (old[key] === undefined || (old[key] !== null && typeof old[key] === "object" && !Array.isArray(old[key])));
+    if (nested) changes.push(...diffPaths(file, old[key], next[key], depth, path));
+    else changes.push({ file, kind: !Object.hasOwn(old, key) ? "add" : !Object.hasOwn(next, key) ? "remove" : "change", path: path.join(".") });
+  }
+  return changes;
+}
+
+/**
+ * The preview of a guided dry run for the owner: what the plan would add to or change in the configuration and routing files,
+ * which workspace modes it sets and which client registrations it makes. Paths and values of the owner's system stay out: entries
+ * name fields and aliases only. Mode and client entries state what the answers set; the dry run does not compare them with the
+ * current state, so they are always `change`.
+ */
+export function plannedChanges(plan: GuidedPlan, existing: { config?: unknown; routing?: unknown }): SetupChange[] {
+  return [
+    ...diffPaths("config", existing.config, plan.nextConfig, 2),
+    ...(plan.routingDocument === undefined ? [] : diffPaths("routing", existing.routing, plan.routingDocument, 3)),
+    ...plan.modeRequests.map((mode): SetupChange => ({ file: "modes", kind: "change", path: `workspaces.${mode.alias}` })),
+    ...plan.targets.map((target): SetupChange => ({ file: "client", kind: "change", path: `${target.client}.${target.alias}` })),
+  ];
 }

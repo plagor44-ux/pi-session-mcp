@@ -292,6 +292,50 @@ recovery refs, decide whether anything outside the preserved set matters, and
 only then run `--reset --discard --apply` (or recreate) on the writer. Recovery
 refs are yours to delete. See [ADR 0016](adr/0016-writer-recovery-export.md).
 
+## Check a writer for work
+
+`pi-session-mcp-setup --writer <name> --inspect [--json]` answers whether the
+writer's clone holds work that only the clone has. It is the check to run before
+`--reset`, `--recreate`, `--finish`, a settings change or `--remove`. It reuses
+the inspection that those operations refuse on, mounts the clone read-only,
+changes no state, and takes neither `--apply` nor `--dry-run`. It takes the
+global setup lock and the writer lease, so a writer that a session holds
+answers `writer_busy`; it runs no Doctor gate, so it works while setup is
+otherwise broken.
+
+The finding's `code` is one of these (the codes table below lists each once):
+
+- `writer_clean` (ok): the clone equals its recorded base. Ignored files may exist (see the counters).
+- `writer_collected` (ok): the clone holds work, but it equals the last collection: its refs are in the operator checkout and a non-discard remove would not refuse for work.
+- `writer_uncollected` (failed): work that only the clone holds, or a gitlink change that collection cannot export. Collect it (`--collect --apply`) or decide to lose it.
+- `writer_nested_repository` (failed): a repository below the clone's top level (ignored paths included) that no export can preserve; every cleanup without `--discard` refuses.
+- `writer_not_provisioned` (failed): the writer name is valid but no writer of that name was provisioned, or provisioning has not finished.
+
+`alias_unknown` (the repository alias is not configured), `writer_state_invalid`,
+`writer_inspect_failed` (including an unmerged index), `writer_busy` and
+`writer_lease_unavailable` keep their meaning. The exit status is 0 for
+`writer_clean` and `writer_collected` and 1 for every other code, so `1` with
+`writer_uncollected` is an answer, not a failure of the check.
+
+The finding carries path-free counters:
+
+| Counter | Counts |
+| --- | --- |
+| `commits` | Commits on any local branch or on `HEAD` (a detached `HEAD` included) that the recorded base does not contain. A commit that only a tag reaches is not counted here; its tag counts as `unexportedRefs` |
+| `branches` | Local branches other than the recorded base branch |
+| `stashes` | Stash entries |
+| `unexportedRefs` | Tags, notes and other refs whose objects the operator checkout does not hold |
+| `changes` | Tracked paths that differ from `HEAD` in the index or in the worktree, each counted once (a rename is two paths); staged work that the worktree has restored and paths hidden by an index flag (`assume-unchanged`, `skip-worktree`) count too |
+| `untracked` | Untracked files that Git does not ignore |
+| `ignored` | Untracked files that Git ignores |
+| `nestedRepositories` | `.git` entries below the top level, ignored paths included |
+
+`ignored` is not work for collection, so a writer with ignored files is still
+`writer_clean`. Reset and a persistent writer's finish keep ignored files
+unless `--clean all` is set; `--remove`, recreate and an ephemeral writer's
+finish delete them. A non-zero `ignored` therefore tells you what `--remove`
+would destroy that no collection preserved. `--remove` does not warn about it.
+
 ## Collect, finish and reuse
 
 Close the writer's coding session before lifecycle mutation. Take over and review
@@ -415,11 +459,12 @@ unexported work. Do not blindly retry or bypass a refusal by changing profiles.
 
 | Writer operation | Behavior |
 | --- | --- |
+| `--inspect [--json]` | Read-only check for work that only the clone holds: reports `writer_clean`, `writer_collected`, `writer_uncollected` or `writer_nested_repository` with counters. Takes no `--apply`; changes and removes nothing ([Check a writer for work](#check-a-writer-for-work)) |
 | `--collect --apply` | Bundle export; retain clone |
 | `--reset --apply [--base <ref>]` | Reset to current source base branch, delete extra branches/stash and clean untracked files, and ignored files with `--clean all`; falls back to recreation if post-reset verification fails |
 | `--recreate --apply` | Rebuild clone and agent copy from the workspace default base, retaining image/settings |
 | `--finish --apply` | Collect, then reset persistent / recreate ephemeral on the workspace default base |
-| `--remove` | Explicit mutation: unregister owned registrations before removing writer state; read-only directories inside the writer root (such as Go's module cache) are made removable first, and `state.json` is removed last |
+| `--remove` | **Removes immediately: no dry run and no `--apply`.** Unregisters owned registrations before removing writer state; read-only directories inside the writer root (such as Go's module cache) are made removable first, and `state.json` is removed last. A clean writer is deleted at once, with its ignored files (`.venv`, `node_modules`, `.env`, build output, caches), which collection never exports. Check first with `--inspect` |
 | `--verify` | Doctor and bounded relay-path MCP handshake/tools/list/capabilities; verify the host registration with client-target verify too; no session or provider request |
 
 ### Setup under load
@@ -442,7 +487,9 @@ Writer setup stays fail-closed on a healthy but slow host (#229). Three rules ap
   ownership and hook state. Other users of the lock (skill customization and the
   modes step) keep their 30 second wait. The lock records no holder information.
 
-Other than explicit `--remove` and `--verify`, omitting apply only plans.
+Other than `--remove` (which removes immediately and has no dry run), `--verify`
+and the read-only `--inspect`, omitting apply only plans. `--collect` without
+`--apply` inspects nothing; use `--inspect` to look at a clone.
 Reset/recreate/remove refuse changed uncollected work unless given `--discard`.
 Every mutating writer operation holds the host-only lease and container fence,
 including collect, acceptance and reconciliation. A held session (even idle)
@@ -494,7 +541,7 @@ pi-session-mcp-setup --repo my-review --mode snapshot --source my-project --appl
 # Plans, then materializes the slot at a full commit ID (never a ref name).
 pi-session-mcp-setup --snapshot my-review --head <commit-oid> --base <commit-oid>
 pi-session-mcp-setup --snapshot my-review --head <commit-oid> --base <commit-oid> --apply
-# Removes a clean slot (mutates without --apply, like --writer --remove).
+# Removes a clean slot at once: no dry run and no --apply, like --writer --remove.
 pi-session-mcp-setup --snapshot my-review --remove
 ```
 
@@ -575,7 +622,7 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_limits_updated` | Existing writer limits updated under its fence |
 | `cgroup_controller_unavailable` | Requested CPU or memory controller is unavailable; mode was not written |
 | `writer_remove_planned` | Surplus writer would be removed |
-| `writer_collect_planned` | Collection planned only |
+| `writer_collect_planned` | Collection planned only; nothing was inspected |
 | `writer_reset_planned` | Reset planned only |
 | `writer_recreate_planned` | Recreation planned only |
 | `writer_finish_planned` | Finish planned only |
@@ -596,13 +643,15 @@ listed below; dynamic planned and MCP verification outcomes are listed explicitl
 | `writer_state_invalid` | Missing/malformed/mismatched writer state |
 | `writer_state_unreadable` | Writer state cannot safely be read |
 | `writer_inspect_failed` | Contained work inspection failed, including an index that cannot be evaluated such as an unmerged conflict |
-| `writer_uncollected` | Changed work lacks a matching complete collection digest; destructive operation refused |
+| `writer_clean` | `--inspect`: the clone equals its recorded base |
+| `writer_not_provisioned` | `--inspect`: no provisioned writer of that name (or provisioning unfinished) |
+| `writer_uncollected` | Changed work lacks a matching complete collection digest; destructive operation refused (`--inspect` reports it with counters) |
 | `writer_nested_repository` | Nested repository or gitlink cannot be preserved by collection; no cleanup authorization |
 | `writer_collect_failed` | Bundle generation/verification/import failed, including an unmerged index |
 | `writer_collect_incomplete` | One or more branch names refused, a collected commit or tree is missing from the operator checkout, or a tag, note or other unexported ref names an object only the clone has; no cleanup authorization |
 | `ref_name_refused` | Unsafe export name, or a `-wip`, `-index`, `-detached` or `-stash-<n>` name collision |
 | `nothing_to_collect` | No changed branch, WIP, index, detached commit or stash entry to export |
-| `writer_collected` | Complete export recorded |
+| `writer_collected` | Complete export recorded; `--inspect` reports it when the clone's work equals the last collection |
 | `writer_reset_failed` | Reset command or validation failed |
 | `writer_reset` | Persistent clone reset and verified |
 | `writer_recreate_failed` | Recreated clone is not at baseline |

@@ -16,7 +16,7 @@ import { createProcessRunner } from "./setup-process.js";
 import { changeWriterMode } from "./setup-writers.js";
 import { formatSetupHuman, formatSetupResult, type SetupCliRequest } from "./setup-cli.js";
 import { result, type SetupResult } from "./setup-result.js";
-import { parseGuidedAnswers, type GuidedAnswers } from "./guided/answers.js";
+import { AnswersInvalidError, parseGuidedAnswers, type AnswersIssue, type GuidedAnswers } from "./guided/answers.js";
 import { collectGuidedAnswers, type Prompter } from "./guided/prompts.js";
 import { runGuided, type GuidedDependencies } from "./guided/run.js";
 
@@ -233,15 +233,26 @@ export async function offerProviderCredentials(prompter: Prompter, catalog: Pric
 export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided"]>, json: boolean, signal: AbortSignal, injected: GuidedMainDependencies = {}): Promise<number> {
   let output: Pick<NodeJS.WriteStream, "write"> = process.stdout;
   const write = (report: SetupResult): number => { output.write((json ? formatSetupResult(report) : formatSetupHuman(report)) + "\n"); return report.exitCode; };
-  const fail = (code: string, exitCode: 1 | 64 | 130 | 143 = 1): number => write(result(request.apply ? "apply" : "dry-run", [{ target: { client: "guided", scope: "plan", alias: "installation" }, status: "failed", code }], "failed", exitCode));
+  const fail = (code: string, exitCode: 1 | 64 | 130 | 143 = 1, issues: readonly AnswersIssue[] = []): number => write(result(request.apply ? "apply" : "dry-run", [
+    { target: { client: "guided", scope: "plan", alias: "installation" }, status: "failed", code },
+    // One finding per violated rule: the field path as alias and the rule as code. Neither carries a value from the input.
+    ...issues.map((issue) => ({ target: { client: "guided", scope: "answers", alias: issue.path }, status: "failed" as const, code: issue.rule })),
+  ], "failed", exitCode));
   if (!request.answersPath && !(injected.terminal ?? process.stdin.isTTY)) return fail("usage_invalid", 64);
   const configPath = resolve(request.configPath ?? process.env.PI_SESSION_MCP_CONFIG ?? join(homedir(), ".config", "pi-session-mcp", "pi-session-mcp.json"));
   let terminal: ReturnType<typeof terminalPrompter> | undefined;
   try {
     let answers: GuidedAnswers;
     if (request.answersPath) {
-      try { answers = parseGuidedAnswers(JSON.parse(await readFile(request.answersPath, "utf8"))); }
-      catch { return fail("answers_invalid"); }
+      let text: string;
+      // A file that cannot be read, a document that is not JSON and an answers violation are input errors: exit 64, as for `usage_invalid`.
+      try { text = await readFile(request.answersPath, "utf8"); }
+      catch { return fail("answers_unreadable", 64); }
+      let document: unknown;
+      try { document = JSON.parse(text); }
+      catch { return fail("answers_invalid", 64, [{ path: "document", rule: "not_json" }]); }
+      try { answers = parseGuidedAnswers(document); }
+      catch (error) { return fail("answers_invalid", 64, error instanceof AnswersInvalidError ? error.issues : []); }
     } else {
       let existing: unknown;
       try { existing = JSON.parse(await readFile(configPath, "utf8")); }
@@ -289,6 +300,6 @@ export async function runGuidedMain(request: NonNullable<SetupCliRequest["guided
   } catch (error) {
     const code = (error as { code?: unknown }).code;
     const allowed = ["interview_declined", "provider_login_required", "no_read_only_profile", "answers_invalid", "input_closed"];
-    return fail(signal.aborted ? "operation_interrupted" : typeof code === "string" && allowed.includes(code) ? code : "operation_failed", signal.aborted ? signal.reason === 143 ? 143 : 130 : 1);
+    return fail(signal.aborted ? "operation_interrupted" : typeof code === "string" && allowed.includes(code) ? code : "operation_failed", signal.aborted ? signal.reason === 143 ? 143 : 130 : 1, error instanceof AnswersInvalidError ? error.issues : []);
   } finally { terminal?.close(); }
 }
