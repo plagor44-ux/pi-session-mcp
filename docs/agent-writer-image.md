@@ -91,6 +91,10 @@ A setup result looks like this (a dry run of a new writer):
 2. **Stop** on a code that this page does not list as continuing. An unknown code
    is not a success.
 3. A dry run that ends `planned` is not an approval to apply. Show it to the owner.
+4. Read every finding of a command, not only the first. A `--remove` returns
+   `writer_removed` and, on a legacy writer, hook findings next to it. Continue
+   only if all of them are in the continue table; with a failed hook finding the
+   writer is already gone, so report that state and stop.
 
 Codes that let you continue (all full descriptions are in
 [Execution modes](execution-modes.md#reports-and-finding-codes)):
@@ -103,6 +107,9 @@ Codes that let you continue (all full descriptions are in
 | `mcp_verified` | `--verify` | The writer answers a bounded MCP check |
 | `isolation_control_passed` | control apply | The host control detected the expected escapes |
 | `writer_collected`, `nothing_to_collect` | collect | The owner reviews the refs; nothing is lost yet |
+| `writer_reset`, `writer_recreated` | reset, recreate, finish | The clone is back at the base; finish ends with one of these |
+| `writer_removed` | `--remove` | The writer's state is deleted; provisioning its replacement comes next, after the owner's approval of that step |
+| `hook_removed`, `hook_absent`, `hook_kept_shared` | `--remove` | Findings about a wake hook entry that can accompany `writer_removed` on a legacy writer: the entry went (`hook_removed`), was already gone (`hook_absent`), or stays because another registration still needs it (`hook_kept_shared`, status `unchanged`) |
 | `controllers_restart_required` | apply | Not a failure; an owner action to report |
 
 Codes that mean stop, with the next step for the owner (a code not listed here
@@ -110,7 +117,7 @@ also means stop):
 
 | Code | What to tell the owner |
 | --- | --- |
-| `writer_settings_changed` | A kept writer was provisioned from other settings, for example another image ID. Nothing was changed. Adopting the new settings needs the collect, remove, provision sequence |
+| `writer_settings_changed` | A kept writer was provisioned from other settings, for example another image ID. Nothing was changed. Adopting the new settings needs the collect, remove, provision sequence for **every** writer of the repository |
 | `writer_remove_planned` | The dry run would remove a surplus writer (fewer `--writers` than before); a settings mistake unless intended |
 | `image_unavailable` | The ID is missing in this account's Podman storage, is not 64 lowercase hex characters, or a pinned pull failed |
 | `modes_file_invalid` | The proposed mode is invalid. A tag, a short ID or any other `--image` value that is neither `node` nor a 64-character hex ID is reported with this code |
@@ -126,6 +133,7 @@ also means stop):
 | `writer_uncollected`, `writer_nested_repository`, `writer_collect_incomplete`, `ref_name_refused` | The writer holds work that is not collected, or collection is incomplete. Owner decision |
 | `registration_divergent`, `workspace_base_ambiguous`, `base_ref_invalid`, `writer_base_unavailable`, `remote_url_refused` | State the setup will not change on its own |
 | `writer_clone_failed`, `clone_verification_failed`, `writer_state_invalid`, `writer_state_unreadable`, `writer_operation_failed`, `writer_reconcile_failed` | The writer is in a state setup cannot repair by itself |
+| `hook_divergent`, `hook_install_failed`, `hook_config_unreadable`, `settings_unreadable`, `settings_unparseable`, `settings_shape_invalid`, `settings_changed`, `settings_location_invalid` | With `writer_removed`: the writer is gone, but its wake hook entry in the client settings could not be edited and is still there. The overall result is `failed` (exit `1`). Report it and let the owner decide about the entry; provisioning waits |
 
 `pi-session-mcp-doctor --json` prints `schemaVersion`, `ok`, `packageVersion`,
 `checks` (each with `id`, `severity` of `ok`, `warning` or `error`, `subject`, and
@@ -149,21 +157,29 @@ the ones marked **ask** wait for the owner.
 
    Expect `true` and a version. Keep the Doctor result as the baseline. Stop on
    exit `2`.
-2. **Read the current plan.** For a repository that already has container
-   writers, a dry run without settings reuses every recorded setting and lists
-   the existing writers:
+2. **Read the current settings and the writer state.** Two sources, both read
+   only. The repository's recorded settings are its entry (`workspaces.<alias>`)
+   in `execution-modes.json`, next to the configuration: `writers`, `lifecycle`,
+   `profiles`, `image`, `network`, `cache`, `tags`, `clean` and, when set, `base`,
+   `cpus`, `cpuShares` and `memory`. Which slots have a writer comes from Doctor:
+   one `writer_not_ready` check per slot (`<alias>-w1` up to `writers`), `ok` for
+   a ready writer, and an error with `reason` `not_provisioned` for an empty slot.
+   A dry run does not tell them apart:
 
    ```sh
    pi-session-mcp-setup --repo <alias> --json
    ```
 
-   `container_profiles_required` means no container settings are recorded.
-   Existing writers (`writer_planned` per writer) or `writer_settings_changed`
-   mean the repository already has writers: **ask** before you go on, and read
-   [Changing an image later](writer-images.md#6-changing-an-image-later) before you
-   propose anything for them. Note the recorded settings (profiles, `--writers`,
+   It reuses every recorded setting, but it reports `writer_planned` for every
+   kept slot, existing or missing, and carries no settings. Use it only to see
+   whether the recorded settings still plan cleanly; `container_profiles_required`
+   means no container settings are recorded. If the repository already has a
+   writer (a slot with a reason other than `not_provisioned`): **ask** before you
+   go on, and read [Changing an image later](writer-images.md#6-changing-an-image-later)
+   before you propose anything for it. Carry the recorded settings into the new
+   command unchanged except for the setting that changes (profiles, `--writers`,
    `--lifecycle`, `--network`, `--base`, `--tags`, `--clean`, limits, `--cache`);
-   the provisioning command must repeat them all.
+   an omitted flag falls back to its default.
 3. **Get the base and choose the content. Ask.** Read the pinned base from the
    installed package, as [the guide](writer-images.md#3-how-to-build) shows. Agree
    with the owner on the toolchain, its version and the matching `--cache`. Take
@@ -226,11 +242,17 @@ the ones marked **ask** wait for the owner.
    Expect `mcp_verified` for every writer and no Doctor error. Compare the
    warnings with the baseline and report new ones.
 
-To replace the image of an existing writer, do not improvise. Take the sequence in
-[Changing an image later](writer-images.md#6-changing-an-image-later), propose it
-to the owner writer by writer, and run each `--collect --apply`, the removal and
-the new provisioning only after the owner approved that step. Keep the old image
-until the owner says otherwise.
+To replace the image of existing writers, do not improvise. The image is a
+setting of the whole repository: one apply with a new `--image` is refused with
+`writer_settings_changed` while any kept writer still has the old one, so a single
+writer cannot be switched alone and removing one writer does not help. Take the
+sequence in [Changing an image later](writer-images.md#6-changing-an-image-later)
+and propose it to the owner for **every** writer of the repository that has one:
+collect each, let the owner review the refs and decide what to copy out of
+ignored paths, remove each, and only then run the one provisioning command. Run
+each `--collect --apply`, each `--remove` and the provisioning only after the owner
+approved that step; treat `writer_removed` (with its hook findings, see above) as
+success of a removal. Keep the old image until the owner says otherwise.
 
 ## Report
 

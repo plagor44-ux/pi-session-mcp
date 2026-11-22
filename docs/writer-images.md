@@ -361,35 +361,51 @@ mount and variables from the table in section 2 and use `--network=pasta`.
 
 ## 6. Changing an image later
 
-**A new image ID is a settings change.** A rebuilt image, even from the same
-Containerfile, normally gets a different ID (a rebuild with `--no-cache`
-produced a different ID in the check for this guide), and so does a changed
-base. Existing writers keep the ID they were provisioned from. If you repeat the
-provisioning command with a new `--image`, the repository step reports
-`writer_settings_changed` for each kept writer, refuses before it writes the
-mode, and leaves the writers as they are. The same holds for a changed
-`--cache`. To adopt the new settings:
+**A new image ID is a settings change for the whole repository.** A rebuilt
+image, even from the same Containerfile, normally gets a different ID (a rebuild
+with `--no-cache` produced a different ID in the check for this guide), and so
+does a changed base. `--image` (like `--cache`) is a setting of the repository's
+container entry, not of one writer: every writer of the repository is
+provisioned from it. Existing writers keep the ID they were provisioned from. If
+you repeat the provisioning command with a new `--image`, the repository step
+compares **every kept writer** with the new settings, reports
+`writer_settings_changed` for each one that was provisioned from another image,
+refuses before it writes the mode, and leaves the writers as they are. Removing
+one writer and applying again therefore does not work: the other writers still
+differ, the apply is refused again, and the pool stays short a writer. Replace the
+whole pool in this order:
 
-1. Build and check the new image. **Keep the old image** until step 6:
+1. Build and check the new image. **Keep the old image** until step 7:
    collection and removal still run inside the image a writer recorded.
-2. Close the sessions on the writer. Collect its work with
+2. List the provisioned writers of the repository. Doctor reports one
+   `writer_not_ready` check for each configured slot (`<alias>-w1` up to the
+   `writers` count in the repository's entry in `execution-modes.json`): `ok` for
+   a ready writer, otherwise an error whose `reason` is `not_provisioned` for an
+   empty slot and another reason for a slot that has a writer. Every slot that
+   has a writer goes through steps 3 to 5. Close all sessions on these writers
+   first; while the pool is being replaced no coding session can start on the
+   repository.
+3. For each of these writers, collect its work with
    `pi-session-mcp-setup --writer <name> --collect --apply` and review the
    collected refs in your own checkout.
-3. Preserve what collection does not cover. Collection and the work check that
-   guards `--remove` see only what Git in the clone counts as work: commits,
-   staged and unstaged changes, untracked files that are not ignored, and the
-   stash. **Files under ignored paths are neither inspected nor exported**,
-   whatever `--clean` says: `.venv`, `node_modules`, a local `.env`, build
-   output and any other ignored file are deleted with the writer, together
-   with its per-writer cache. Copy out anything you cannot regenerate before
-   you go on (see [Execution modes](execution-modes.md#writer-storage-launch-and-readiness)
+4. For each of them, preserve what collection does not cover. Collection and the
+   work check that guards `--remove` see only what Git in the clone counts as
+   work: commits, staged and unstaged changes, untracked files that are not
+   ignored, and the stash. **Files under ignored paths are neither inspected nor
+   exported**, whatever `--clean` says: `.venv`, `node_modules`, a local `.env`,
+   build output and any other ignored file are deleted with the writer, together
+   with its per-writer cache. Copy out anything you cannot regenerate before you
+   go on (see [Execution modes](execution-modes.md#writer-storage-launch-and-readiness)
    for where a writer keeps its clone). Do not run Git there.
-4. Run `pi-session-mcp-setup --writer <name> --remove`. It removes immediately;
-   it is not a dry run. Without `--discard` it refuses only work that the
-   collection check covers, and never warns about ignored files.
-5. Run the provisioning command again with the full settings and the new
-   `--image <image-id>`, first as a dry run, then with `--apply`.
-6. Once no writer records the old ID, remove the old image with `podman rmi`.
+5. Run `pi-session-mcp-setup --writer <name> --remove` for each of them. It
+   removes immediately; it is not a dry run. Without `--discard` it refuses only
+   work that the collection check covers, and never warns about ignored files.
+   On success it reports `writer_removed`, and on a legacy writer hook findings
+   (`hook_removed`, `hook_absent` or `hook_kept_shared`) can accompany it.
+6. Only when every writer on the old image is gone, run the provisioning command
+   once with the full settings and the new `--image <image-id>`, first as a dry
+   run, then with `--apply`. It provisions and accepts the whole pool.
+7. Once no writer records the old ID, remove the old image with `podman rmi`.
 
 `--recreate` and `--reset` keep the recorded image; neither adopts a new one.
 
