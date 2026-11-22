@@ -22,6 +22,9 @@
   approval, the order of commands with `--json`, which setup result codes mean
   stop or continue, and the evidence to report; it is linked from
   [Agent guide to guided installation](docs/agent-install.md).
+  The README gains a section "Recommended setup for coding agents": how an
+  agent installs without `install.sh`, what the owner does alone, the
+  recommended setup of a controlling agent and where the stop lists are.
 
 ## 0.23.0 — 2026-11-22
 

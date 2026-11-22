@@ -92,6 +92,29 @@ The script then runs the guided setup. The interview proposes profiles from Pi's
 - Configuration format: [Configure](docs/installation.md#2-configure).
 - Upgrades and removal: [Upgrade](docs/installation.md#upgrade) and [Remove](docs/installation.md#remove).
 
+## Recommended setup for coding agents
+
+A coding agent can do two jobs here: install Pi Session MCP for its owner, and then control Pi workers through it. Each has its own guide; this section gives the order and the boundaries.
+
+**Installing on the owner's behalf.** Do not run `install.sh`: it applies directly after installing, has no dry run and needs an interactive terminal unless you pass `--answers`. Instead:
+
+1. Install from npm with an exact version, `npm install -g pi-session-mcp@<version>`, and read the offline model catalog with `pi-session-mcp-setup --list-models --json`.
+2. Write an answers file and run the guided setup as a dry run: `pi-session-mcp-setup --guided --answers <file> --json`. Show the owner the plan and the findings.
+3. Add `--apply` only after the owner has approved that exact plan.
+4. Verify with `pi-session-mcp-doctor --json` and `pi-session-mcp-setup --verify --target <client-target>` (for example `claude-code:user:pi-session-mcp` or `codex:user:pi-session-mcp`).
+
+The owner does these steps, never the agent: the provider sign-in `pi-session-mcp-provider auth login <provider>`, key entry with `pi-session-mcp-provider auth set <provider>`, any second-factor prompt of the provider, and the approvals that spend money or widen access (provider probes, changing an existing configuration, host writes). An agent never asks for, handles or stores a credential. See the [agent install guide](docs/agent-install.md).
+
+**Recommended setup for a controlling agent (Claude Code or Codex).**
+
+- **Review on read-only profiles**, and from a different model family than the author of the change. The default profile must be read-only. Tier routing can enforce the family rule for routed reviews with `authorFamily` ([tool contracts](docs/tool-contracts.md)).
+- **Coding in container workspaces on Linux**, where each coding session leases a rootless-Podman writer with its own full clone ([execution modes](docs/execution-modes.md)). Host writes need the owner's explicit acceptance.
+- **The bundled controller skills**, installed into the client by setup ([Pi skills](docs/skills.md#install-the-controller-skills-into-codex-and-claude-code)): `pi-session-orchestration` covers choosing aliases, scoping a task, running workers in parallel, polling, verifying results independently and closing sessions; `pi-session-profiles` covers creating, changing and retiring profiles, a bounded provider probe, safe writer replacement and reporting.
+- **Optional tier routing**, to let the server pick a profile within a tier for a role ([Operate routing](docs/installation.md#operate-routing)).
+- **A writer image beyond the built-in `node`**, for example with a Go toolchain: [Building a custom writer image](docs/writer-images.md), and for an agent that does it on the owner's behalf, the [agent guide to writer images](docs/agent-writer-image.md).
+
+**When to stop and ask the owner.** Setup changes, provider sign-in, spending, host writes, removing or replacing a writer and anything that deletes work are the owner's decisions. The stop lists are in the [agent install guide](docs/agent-install.md#stop-and-ask-the-owner) and the [agent guide to writer images](docs/agent-writer-image.md#stop-and-ask-the-owner). Stop on any result code a guide does not list as continuing.
+
 ## Tools
 
 | Tool | Purpose |
