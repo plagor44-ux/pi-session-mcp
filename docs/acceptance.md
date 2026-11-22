@@ -845,6 +845,13 @@ the published artifacts were checked, among them Level 2 from a clone of the
 tag and from the published package, and the two installations were upgraded;
 see the [post-release evidence](#v0230-post-release-evidence). No Level 3
 cycle and no targeted live check has run on Pi SDK `1.6.0`.
+On 2026-11-22 the release candidate `b8d5835` of `0.23.1`, a patch release with
+setup CLI changes on the same Pi SDK, passed Level 1 and the Level 2
+acceptance in the working tree and for the packed tarball, each with delivery
+off and on; one test failed in the first full run and passed in the second
+and in three isolated runs; see
+[the record of `0.23.1`](#v0231-pre-release-acceptance). It has no live check
+either, and `--inspect` has not run against a Podman-provisioned writer.
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
@@ -2683,6 +2690,97 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.23.1 pre-release acceptance
+
+`v0.23.1` was checked on 2026-11-22 from 15:09 to 15:25 UTC on its release
+candidate `b8d5835`, in the release worktree on Linux 7.3 (`x64`) with Node.js
+`26.13.1`, npm `12.2.3`, Git `2.56.1`, Codex CLI `0.171.0` and Claude Code
+`2.1.330`. Level 1 passed on the second full run, and Level 2 passed in the
+working tree and for the packed tarball, each with delivery off and with
+delivery on. No live check ran: there is no Level 3 cycle and no targeted live
+check on Pi SDK `1.6.0`. The later commits change only this record, the
+[evaluation record](evaluation/release-0.23.1-2026-11-22/README.md) and the
+README status text, which the package contains. Level 1 and the packed-tarball
+Level 2 are therefore repeated on the head commit of the pull request, and the
+pull request names that head, their results, the `dist/` digest and the
+tarball checksum. This record does not hold the checksum, because recording it
+here would change the archive. The evaluation record holds the commands with
+their exit codes.
+
+The release `0.23.1` ships what `main` holds after `v0.23.0`: the writer image
+guides and the README section for coding agents
+([#316](https://github.com/plagor44-ux/pi-session-mcp/pull/316), documentation
+only) and the setup CLI changes of
+[#320](https://github.com/plagor44-ux/pi-session-mcp/pull/320): the read-only
+`--writer <name> --inspect` ([#317](https://github.com/plagor44-ux/pi-session-mcp/issues/317)),
+per-rule findings for `answers_invalid` and the new `answers_unreadable`
+([#318](https://github.com/plagor44-ux/pi-session-mcp/issues/318)) and the
+path-free change preview of the guided dry run
+([#319](https://github.com/plagor44-ux/pi-session-mcp/issues/319)). The
+maintainer decided on a patch release; the public MCP contract is unchanged,
+which [ADR 0003](adr/0003-post-mvp-maintenance.md) accepts. The exit status of
+`--guided --answers` changes from `1` to `64` for `answers_invalid` and
+`answers_unreadable`; the changelog and the release notes name it. Its own pull
+request, on the branch `chore/release-0.23.1` on top of `main` at `219d0d4`,
+carries only the version commit and the record commits.
+
+- Public contract: `git diff --stat v0.23.0 HEAD` changes nine files under
+  `src/` (all in the setup CLI, the guided setup and the writer lifecycle),
+  eight under `test/` and one under `skills/` (`pi-session-profiles`), none
+  under `scripts/`. No tool definition, field, state or error code of the eight
+  MCP tools changes. A `tools/list` comparison of the two builds was not run.
+- Level 1 in the release worktree of the candidate, after `npm ci`:
+  typecheck, `build:cli` and `build` exited with `0`.
+  - The first full test run, with `NODE_OPTIONS=--unhandled-rejections=strict`,
+    exited with `1`: 202 files, 5482 passed, 1 failed and 15 skipped. The
+    failing test is `test/install-smoke.test.ts`, "ends promptly and kills a
+    descendant that holds the server's pipes", which waits up to 3 s for a
+    descendant process to end. The test and `scripts/install-smoke.mjs` are
+    identical to `v0.23.0`. The file passed three times in isolation, and the
+    second full run exited with `0`: 202 files, 5483 passed and 15 skipped.
+    The cause of the first failure was not investigated.
+  - `npm audit` and `npm audit --omit=dev` both exited with `0` and reported 0
+    vulnerabilities.
+  - Doctor reported `packageVersion` `0.23.1`. It exited with `2` because no
+    configuration was set (`config_missing`); every other check was `ok`.
+  - `git diff --check` exited with `0`.
+  - `npm pack` listed 1084 files. A second pack produced the same shasum and
+    SHA-256 as the first. The package holds no `docs/superpowers/` file, and a
+    scan of the unpacked files for the absolute home path of the build host and
+    the maintainer's address found none.
+- Level 2 in the working tree: 160 of 160 checks passed with delivery off and
+  228 of 228 with `--events spool`. The digest of `dist/` was the same before
+  and after.
+- Packed-tarball Level 2 from a fresh prefix: 160 of 160 with delivery off and
+  228 of 228 with `--events spool`. The install into the prefix exited with
+  `0`, and the install smoke reported `smoke_passed` with version `0.23.1`.
+  The global install resolves all eight `@earendil-works` packages of the SDK
+  family at `1.6.0`, `undici` `8.12.4` and `minimatch` `11.0.3`, and no `hono`
+  and no `picomatch`.
+- Each of the four Level 2 runs exited with `0`, covered the four targets
+  (Codex `user`; Claude Code `user`, `project` and `local`), and reported the
+  real registrations unchanged, no leftover process, the leak check passed and
+  the build unchanged. The disposable prefix and the tarball were removed.
+- What covers the new setup behaviour: the `--inspect` counters and verdicts
+  run against real Git clones in `test/writer-inspect.test.ts` and
+  `test/writer-inspect-matrix.test.ts` (in CI on Linux and both macOS runners),
+  and the command-line path against a mocked lifecycle in
+  `test/setup-writers.test.ts`. The two Podman test files passed on the host of
+  this run and are skipped in CI; neither calls `inspectWriter`. Level 2 does
+  not call `--inspect`, `--guided` or `--answers`.
+
+Not established for `0.23.1`: `--writer <name> --inspect` against a writer
+that Podman provisioned, end to end through the installed command line;
+`--guided --answers` against an installed package, with a script that checks
+the exit status `64`; any live behaviour on Pi SDK `1.6.0`, among it the new
+GPT-6.2 models, the changed `find` pattern semantics, the wider provider
+retries and the tool results of an aborted batch; an abort during a coding
+session's `read` against a real provider; a profile with `maxOutputTokens`
+against a real provider; tier routing with real routed starts; a provider store
+with a stored key; the Claude Code wake; container writers in operation; the
+server host; macOS outside CI; and the published-release Level 2 and the
+upgrades of the real installations, which follow after publishing.
 
 ### v0.23.0 post-release evidence
 
