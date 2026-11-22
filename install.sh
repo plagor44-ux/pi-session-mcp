@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-VERSION="0.22.2"
+VERSION="0.23.0"
 
 case "$(uname -s)" in
   Linux|Darwin) ;;
