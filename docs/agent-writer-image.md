@@ -56,6 +56,13 @@ Stop before each of these and wait for an explicit answer:
   containers ([details](writer-images.md#2-what-the-image-must-contain-and-what-the-writer-provides)).
   Never print the environment. If a proxy URL with credentials is set in the shell
   that would run setup, ask the owner before you run anything.
+- **Pausing coding starts.** Replacing a writer's image takes several commands,
+  and between them the relay still admits new coding sessions to any ready
+  writer. A session that starts after ignored files were copied out can leave new
+  ones that `--remove` deletes. Before the first `--collect --apply` of a
+  replacement, ask the owner to pause every controller that can start coding
+  sessions on the repository, and do not start one yourself. Wait for the owner's
+  confirmation, and ask again before resuming after the verification.
 - **Reconnecting controllers.** On `controllers_restart_required` the owner
   reconnects or restarts the affected controllers. Report it; do not restart them.
 - **Anything unexpected.** An unknown result code, a Doctor error, or a
@@ -247,8 +254,9 @@ setting of the whole repository: one apply with a new `--image` is refused with
 `writer_settings_changed` while any kept writer still has the old one, so a single
 writer cannot be switched alone and removing one writer does not help. Take the
 sequence in [Changing an image later](writer-images.md#6-changing-an-image-later)
-and propose it to the owner for **every** writer of the repository that has one:
-collect each, let the owner review the refs and decide what to copy out of
+and propose it to the owner for **every** writer of the repository that has one.
+Start with the pause of coding starts above, and keep it until step 8 has passed.
+Then collect each, let the owner review the refs and decide what to copy out of
 ignored paths, remove each, and only then run the one provisioning command. Run
 each `--collect --apply`, each `--remove` and the provisioning only after the owner
 approved that step; treat `writer_removed` (with its hook findings, see above) as
@@ -266,6 +274,8 @@ Report these, and nothing from the owner's environment:
 - The dry-run JSON, the apply JSON and the verify JSON for each writer.
 - The Doctor result before and after: `exitCode`, and every check that is not
   `ok` with its `id`, `subject` and `reason`.
+- For an image replacement: that the owner confirmed the pause of coding starts,
+  and when it was lifted.
 - What was not done and what the owner still has to do, such as reconnecting
   controllers after `controllers_restart_required`, copying out ignored files,
   or removing an old image.

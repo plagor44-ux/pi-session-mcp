@@ -382,9 +382,22 @@ whole pool in this order:
    `writers` count in the repository's entry in `execution-modes.json`): `ok` for
    a ready writer, otherwise an error whose `reason` is `not_provisioned` for an
    empty slot and another reason for a slot that has a writer. Every slot that
-   has a writer goes through steps 3 to 5. Close all sessions on these writers
-   first; while the pool is being replaced no coding session can start on the
-   repository.
+   has a writer goes through steps 3 to 5.
+
+   **Pause new coding starts first, and keep them paused until the end.**
+   Setup holds a writer's lease only while one command runs. Between two
+   commands the relay still admits a new coding session to any writer that is
+   ready and accepted, including a writer on the old image. A session that starts
+   after you copied out the ignored files, and leaves new ones, loses them at the
+   removal; `--remove` does not warn about ignored files. So close the open
+   sessions on these writers, and then keep every controller that can start a
+   coding session on this repository (each client connected to the host
+   `pi-session-mcp` server, and any agent or script that calls `pi_session_start`
+   on its alias) from doing so: end those controller sessions, disconnect the
+   server in them, or agree that nobody starts coding work. Resume only after
+   step 6 has accepted the new pool and `pi-session-mcp-setup --writer <name>
+   --verify` has passed for each writer. A start in between either lands on an
+   old writer that is about to go or finds none (`writer_unavailable`).
 3. For each of these writers, collect its work with
    `pi-session-mcp-setup --writer <name> --collect --apply` and review the
    collected refs in your own checkout.
