@@ -98,7 +98,7 @@ A coding agent can do two jobs here: install Pi Session MCP for its owner, and t
 
 **Installing on the owner's behalf.** Do not run `install.sh`: it applies directly after installing, has no dry run and needs an interactive terminal unless you pass `--answers`. Instead:
 
-1. Install from npm with an exact version, `npm install -g pi-session-mcp@<version>`, and read the offline model catalog with `pi-session-mcp-setup --list-models --json`.
+1. Check whether the package is installed already: `npm ls -g --depth=0 pi-session-mcp`. If it is not, install it from npm with an exact version, `npm install -g pi-session-mcp@<version>`. If the same version is there, reuse it. If another version is there, this is an upgrade: stop and take the owner-approved [upgrade procedure](docs/installation.md#upgrade), which starts by closing the client sessions; installing over it first can leave registrations bound to the old release. Then read the offline model catalog with `pi-session-mcp-setup --list-models --json`.
 2. Write an answers file and run the guided setup as a dry run: `pi-session-mcp-setup --guided --answers <file> --json`. Show the owner the plan and the findings.
 3. Add `--apply` only after the owner has approved that exact plan.
 4. Verify with `pi-session-mcp-doctor --json` and `pi-session-mcp-setup --verify --target <client-target>` (for example `claude-code:user:pi-session-mcp` or `codex:user:pi-session-mcp`).
@@ -113,7 +113,7 @@ The owner does these steps, never the agent: the provider sign-in `pi-session-mc
 - **Optional tier routing**, to let the server pick a profile within a tier for a role ([Operate routing](docs/installation.md#operate-routing)).
 - **A writer image beyond the built-in `node`**, for example with a Go toolchain: [Building a custom writer image](docs/writer-images.md), and for an agent that does it on the owner's behalf, the [agent guide to writer images](docs/agent-writer-image.md).
 
-**When to stop and ask the owner.** Setup changes, provider sign-in, spending, host writes, removing or replacing a writer and anything that deletes work are the owner's decisions. The stop lists are in the [agent install guide](docs/agent-install.md#stop-and-ask-the-owner) and the [agent guide to writer images](docs/agent-writer-image.md#stop-and-ask-the-owner). Stop on any result code a guide does not list as continuing.
+**When to stop and ask the owner.** Setup changes, provider sign-in, spending, host writes, removing or replacing a writer and anything that deletes work are the owner's decisions. The stop lists are in the [agent install guide](docs/agent-install.md#stop-and-ask-the-owner) and the [agent guide to writer images](docs/agent-writer-image.md#stop-and-ask-the-owner). For the guided installation, follow the findings and approval rules of its own guide; for writer images, stop on any result code that guide does not list as continuing.
 
 ## Tools
 
