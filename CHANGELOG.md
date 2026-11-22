@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+## 0.23.0 — 2026-11-22
+
+Minor release: the Pi SDK family moves from 1.5.2 to 1.6.0. The maintainer
+decided on a minor release; [ADR 0003](docs/adr/0003-post-mvp-maintenance.md)
+alone would allow a patch, because the public MCP contract is unchanged: no
+tool, field, state or error code is new, and neither is a configuration
+field, a setup outcome or a Doctor check. Since 0.22.2 the repository changes
+only the dependency pins and lockfile, the documents named below, and the
+README header and logo ([#313](https://github.com/plagor44-ux/pi-session-mcp/pull/313));
+no source, test or script file changes. A live two-client cycle (Level 3) on
+Pi SDK 1.6.0 has not been run. See the
+[acceptance record](docs/acceptance.md#v0230-pre-release-acceptance).
+**Upgrade note:** as for every release, run the repository step of each
+container repository with `--apply` before the client targets, as described in
+[Installation](docs/installation.md#upgrade). Close the client sessions first:
+the update applies to server processes started after the upgrade. The
+controller skills are unchanged. **Rollback note:** reinstall 0.22.2 with the
+same steps. This release changes no stored format of Pi Session MCP.
+
 ### Changed
 
 - Updated the Pi SDK family from 1.5.2 to 1.6.0: `pi-coding-agent`, `pi-ai`,
