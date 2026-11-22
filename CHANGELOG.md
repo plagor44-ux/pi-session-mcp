@@ -16,8 +16,23 @@
   setup report gains the operation `inspect` and an optional `counts` object on
   a finding; the MCP tool contract is unchanged.
 
+- Guided setup reports why an answers file was refused
+  ([#318](https://github.com/plagor44-ux/pi-session-mcp/issues/318)).
+  `answers_invalid` is followed by one finding per violated rule (at most 20),
+  with the field path (field names and array indices only) as the alias of the
+  target `guided/answers/<path>` and a rule code such as `missing_field`,
+  `wrong_type`, `unknown_field`, `required_with_tier` or
+  `default_profile_is_code`; a file that is not JSON gets the rule `not_json`.
+  No value and no unknown key name from the file is echoed. A file that cannot
+  be read is the new code `answers_unreadable`. `docs/agent-install.md` now
+  documents the complete answers format and every guided result code.
+
 ### Changed
 
+- **Exit status:** `answers_invalid` and the new `answers_unreadable` exit with
+  `64`, as `usage_invalid` does, instead of `1`. A script that tested for `1`
+  after `--guided --answers` must accept `64` as well. Answers that the
+  interview builds itself and that fail validation still exit with `1`.
 - The bundled `pi-session-profiles` skill checks writers with `--inspect`
   instead of `--remove`. The documentation now says at every place that
   `--writer <name> --remove`, `--snapshot <alias> --remove` and the client
