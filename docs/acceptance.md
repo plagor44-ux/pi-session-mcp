@@ -2830,7 +2830,7 @@ and the upgrades of the real installations, which follow after publishing.
 
 ### v0.22.2 post-release evidence
 
-Recorded for the published release `0.22.2`, released on 2026-11-17.
+Recorded for the published release `0.22.2`, released on 2026-11-18.
 
 - Published-release Level 2, from a fresh clone of the tag `v0.22.2` and from
   the published npm package: each source passed 160 of 160 checks with
