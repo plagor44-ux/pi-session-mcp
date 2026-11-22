@@ -851,7 +851,14 @@ acceptance in the working tree and for the packed tarball, each with delivery
 off and on; one test failed in the first full run and passed in the second
 and in three isolated runs; see
 [the record of `0.23.1`](#v0231-pre-release-acceptance). It has no live check
-either, and `--inspect` has not run against a Podman-provisioned writer.
+against a provider either. After the release, the published artifacts were
+checked, among them Level 2 from a clone of the tag and from the published
+package, the two installations were upgraded, and two read-only checks ran on
+them: `--writer <name> --inspect` on every writer (all `writer_clean`) and
+`--guided --answers` with three refused answers files (exit status `64` each);
+see the [post-release evidence](#v0231-post-release-evidence). That test
+failure is not explained and is tracked in
+[#322](https://github.com/plagor44-ux/pi-session-mcp/issues/322).
 
 Release notes state which levels were run for a release and what was not
 covered. Pi Session MCP has passed all three levels in earlier private cycles. On
@@ -2690,6 +2697,167 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 (`mcp_verified`, `skill_verified`), and `--writer <name> --verify` passed for
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
+
+### v0.23.1 post-release evidence
+
+Recorded for the published release `0.23.1`, released on 2026-11-22.
+
+The annotated tag `v0.23.1` (tag object `b89a089`) points to
+`d7634f654b2e39f5bc7c8e75e2df2181ee25c56b`, the merge commit of PR #321 on
+`main` and the package's `gitHead`. The second parent of that merge commit is
+`d29a3fbb886dbd87f10633769352b0b2e9415d8f`, the head that the pre-release
+record checked. CI passed on the merge commit (run 45038701183: `test` on
+ubuntu-latest, macos-15 and macos-26, and `verify`), CodeQL passed on it (run
+45038701147) and CI passed on the tag (run 45039427780).
+
+- npm: `pi-session-mcp@0.23.1` is `latest`, with the shasum
+  `19a4c31a88fd0d0f35793551d42ba85602560b95`, the shasum that
+  `npm stage publish` printed for its stage. The integrity is
+  `sha512-AS/YJ+B5aJuN5+JL/NHT+059kOPaiiIjlmuwA65qNMAFqmVec9Qg5l141oWjVfssMxDnYjbYs7gcpyr0jlNeJA==`.
+  The tarball downloaded from the registry has the SHA-256
+  `347d3a95c58c5137b8f1549c872a7be9270cc052ff7186a3ebe1603f9cdedf9b`, which is
+  the checksum that PR #321 records for its head `d29a3fb`: the published
+  package is the archive that was accepted on that head. The dry run from a
+  fresh clone of the tag before staging listed 1085 files, no
+  `docs/superpowers/` file, and the same shasum.
+- GitHub release `v0.23.1`, published 2026-11-22 at 16:01 UTC, with
+  `install.sh` (SHA-256
+  `22a79777342056d0ada69bf4b3fe8f4c07aad0387c0bba39b269e0e8ad3db1dc`) and
+  `install.sh.sha256`. Both were downloaded after publication: the checksum
+  matched (`sha256sum -c`), and `install.sh` is byte-identical to the tag's
+  file. The release notes state the changed exit status of
+  `--guided --answers` (`64` instead of `1` for `answers_invalid` and
+  `answers_unreadable`), the absence of a Level 3 cycle on Pi SDK `1.6.0`, that
+  `--writer <name> --inspect` did not run against a Podman-provisioned writer,
+  and the one red test run of the pre-release Level 1. The notes describe that
+  run as looking timing-sensitive under load; the
+  [corrected pre-release record](#v0231-pre-release-acceptance) and
+  [#322](https://github.com/plagor44-ux/pi-session-mcp/issues/322) supersede
+  that reading, and the release was not edited.
+
+Runs of the published release, with Codex CLI `0.171.0` and Claude Code
+`2.1.330` on Linux 7.3 (`x64`) with Node.js `26.13.1` and npm `12.2.3`:
+
+- A fresh clone of the tag (`HEAD` `d7634f6`, `git describe --tags
+  --exact-match` printed `v0.23.1`): Level 1 passed. `npm ci`, `typecheck`,
+  `build:cli` and `build` exited with `0`; the test run, with
+  `NODE_OPTIONS=--unhandled-rejections=strict`, exited with `0` (202 files,
+  5483 passed, 15 skipped, with no failure; the `install-smoke` test that
+  failed in the first pre-release run passed, a single passing run that does
+  not settle its cause, see [#322](https://github.com/plagor44-ux/pi-session-mcp/issues/322)).
+  `npm audit` and `npm audit --omit=dev` exited with `0` and reported 0
+  vulnerabilities, and Doctor reported `packageVersion` `0.23.1`; it exited
+  with `2` only for `config_missing`, as in the pre-release record. The
+  manifests (`package.json`, `package-lock.json`, `install.sh`) were
+  byte-identical before and after the client cycles, and the checkout was
+  clean. Level 2 exited with `0` and passed 160 of 160 checks with delivery off
+  and, in a second run, 228 of 228 with `--events spool`. Each run covered the
+  four targets (Codex `user`; Claude Code `user`, `project` and `local`) with
+  nine steps each and reported the real registrations unchanged, no leftover
+  process, the leak check passed and the build unchanged.
+- The published package, installed into a fresh prefix from `mktemp -d`
+  (`npm install -g --prefix <prefix> pi-session-mcp@0.23.1`): the install exited
+  with `0`, the installed version is `0.23.1` and the install smoke reported
+  `smoke_passed` with version `0.23.1`. The files of `dist/` have the same
+  digest as in the clone of the tag and in the pre-release working tree and
+  packed tarball
+  (`ab39f9b8e86d4511f84299e4a4f65b1486fd525a1fd969180ca3ece0ed11fa2a`). All
+  eight `@earendil-works` packages of the SDK family resolve at `1.6.0`
+  (`pi-coding-agent`, `pi-ai`, `pi-agent-core`, `pi-mcp`, `pi-tui`,
+  `pi-codemode`, `pi-telemetry` and `pi-schema`), alongside `undici` `8.12.4`,
+  `minimatch` `11.0.3` and `openai` `7.59.0`; the install contains no
+  `picomatch` and no `hono`. Level 2 through the installed
+  `pi-session-mcp-setup` exited with `0` and passed 160 of 160 checks with
+  delivery off and 228 of 228 with `--events spool`, with the same four
+  targets, nine steps each and the same four reported conditions. The prefix was
+  removed afterwards.
+
+| Source | Delivery off | `--events spool` |
+| --- | --- | --- |
+| Fresh clone of the tag | exit 0, 160 of 160 | exit 0, 228 of 228 |
+| Published npm package | exit 0, 160 of 160 | exit 0, 228 of 228 |
+
+Installations: both operator installations were upgraded from `0.23.0` to
+`0.23.1` on 2026-11-22 along the documented upgrade path
+([Installation](installation.md#upgrade)): the client targets removed, the
+package installed from the registry after the GitHub release and the registry
+checksum were confirmed, each container repository's step
+(`pi-session-mcp-setup --repo <alias>`) first as a dry run and then with
+`--apply`, and the client targets applied and verified again. No repository
+change, commit or pull request was part of it, and no writer was removed,
+reset, collected or discarded. Before any change, on both installations no
+writer lease was held, no writer container was running and no server process
+had a child process or a TCP connection. Every repository reported
+`mode_unchanged` and `controllers_restart_required`.
+
+- First installation: 6 container repositories and 22 writers. Doctor before
+  the upgrade reported no error and 36 warnings; after the install and before
+  the repository step it reported 22 errors, `writer_not_ready` with the reason
+  `package_version`, and the same 36 warnings; after the repository step it
+  reported no error and 36 warnings again: `snapshot_unavailable` 1,
+  `workspace_gitfile` 11, `workspace_mode_unset` 11 and `writer_base_behind`
+  13. All 22 writers were `writer_accepted` and then `mcp_verified`, each on
+  the first attempt. Both client targets verified (`mcp_verified`, Claude Code
+  with skills and hook, Codex with skills). The routing check exited with `0`
+  with no error and no warning.
+- Second installation: 5 container repositories and 16 writers. Doctor before
+  the upgrade reported no error and 3 warnings; after the install it reported
+  16 errors (`writer_not_ready`, reason `package_version`) and the same 3
+  warnings; after the repository step no error and 3 warnings again:
+  `workspace_mode_unset` 1 and `writer_base_behind` 2. All 16 writers were
+  `writer_accepted` and then `mcp_verified`, each on the first attempt. Both
+  client targets verified (`mcp_verified`, with skills). The routing check
+  exited with `0` with no error and no warning.
+- No `mcp_timeout` and no retry occurred.
+
+Running controller sessions keep the modules they loaded until they reconnect:
+a client needs an MCP reconnect, and Codex a restart. No stored format
+changed.
+
+Two read-only live checks ran on the upgraded installations. Neither is a
+Level 3 cycle and neither used a provider.
+
+- `--writer <name> --inspect --json` on every writer, one writer at a time,
+  after all writers were verified. The command takes the setup lock and the
+  writer lease, mounts the clone read-only and changes no state; no verdict
+  was acted on. All 22 writers of the first installation and all 16 of the
+  second reported `writer_clean` and exited with `0`. No call reported
+  `writer_collected`, `writer_uncollected`, `writer_nested_repository`,
+  `writer_not_provisioned`, `writer_busy` or any other error code. A call took
+  0.8 s to 1.4 s on the first installation and 0.9 s to 1.3 s on the second.
+  These are container writers that the setup provisioned through Podman, so
+  the command-line path of `--inspect` has now run end to end against such
+  writers. Every writer was clean, so the check exercised the clean verdict
+  and the lock, lease and read-only mount path only: the verdicts
+  `writer_uncollected` and `writer_nested_repository` and the exit status `1`
+  were not observed live and rest on the release's automated tests.
+- `--guided --answers <file> --json` with the installed `0.23.1` package, run
+  as a dry run on the first installation in an isolated environment: home, XDG
+  directories and the configuration path all inside one fresh temporary
+  directory, with nothing pointing at the real configuration or client
+  registrations. The temporary directory was removed afterwards, and a
+  fingerprint of the real configuration, routing and ownership files was the
+  same before and after.
+
+  | Input | Findings | Exit status |
+  | --- | --- | --- |
+  | A file that is not JSON | `answers_invalid`, then the rule `not_json` (target `guided/answers/document`) | 64 |
+  | Valid JSON with the required field `clients` removed | `answers_invalid`, then the rule `missing_field` (target `guided/answers/clients`) | 64 |
+  | A file that does not exist | `answers_unreadable` | 64 |
+
+  Each run ended with the status `failed` and wrote nothing to standard error.
+  The findings carried only a target and a rule code: no path and no value
+  from the answers file appeared in them. The rest of each report was not
+  examined for this check. The exit status `64` is therefore observed on the
+  installed package for these three inputs; the other `answers_invalid` paths
+  (answers that the interview builds itself exit with `1`) were not run.
+
+No Level 3 cycle and no targeted live check on a provider ran on Pi SDK
+`1.6.0`. This section adds no live check of provider-backed behaviour:
+what the [pre-release record](#v0231-pre-release-acceptance) names as not
+established stays so, except the published-release Level 2, the upgrades and
+the two read-only checks above. Also not run here: a `tools/list` comparison of
+`0.23.0` and `0.23.1`, `npm audit` on the installations, and macOS outside CI.
 
 ### v0.23.1 pre-release acceptance
 

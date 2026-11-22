@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Changed
+
+- Acceptance records only, no runtime change: the
+  [post-release evidence of 0.23.1](docs/acceptance.md#v0231-post-release-evidence)
+  (registry and release assets, Level 2 on a clone of the tag and on the
+  published npm package, the upgrade of both installations, and two read-only
+  live checks on them: `--writer <name> --inspect` on every writer, all
+  `writer_clean`, and exit status `64` of `--guided --answers` for three
+  refused answers files). The pre-release records of 0.23.1 no longer call the
+  red `install-smoke` run a timeout after 30 polls under load: the cause is
+  open and tracked in
+  [#322](https://github.com/plagor44-ux/pi-session-mcp/issues/322). None of it
+  is a Level 3 cycle.
+
 ## 0.23.1 — 2026-11-22
 
 Patch release: the setup CLI gains a read-only check for container writers and
