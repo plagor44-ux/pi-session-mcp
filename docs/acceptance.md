@@ -800,7 +800,9 @@ of `0.22.2` with Pi SDK `1.5.2`; see
 [its record](evaluation/level3-2026-11-17/README.md). All ten tasks and every
 live criterion passed; its Level 1 criterion is not met, because `npm audit`
 reports a development-only advisory that has no fixed version (see
-[the record of `0.22.2`](#v0222-pre-release-acceptance)).
+[the record of `0.22.2`](#v0222-pre-release-acceptance)). After the release,
+the published-release Level 2 and the upgrades of the two installations
+passed; see the [post-release evidence](#v0222-post-release-evidence).
 Two targeted records of the same day are not Level 3 cycles and add nothing to
 that gate: the
 [Claude Code wake](evaluation/wake-2026-11-10/README.md) with the hook that
@@ -838,7 +840,10 @@ cycle either.
 On 2026-11-22 the release candidate `c5859ec` of `0.23.0`, which moves the Pi
 SDK from `1.5.2` to `1.6.0`, passed Level 1 and the Level 2 acceptance in the
 working tree and for the packed tarball, each with delivery off and on; see
-[the record of `0.23.0`](#v0230-pre-release-acceptance). No Level 3 cycle and
+[the record of `0.23.0`](#v0230-pre-release-acceptance). After the release,
+the published artifacts were checked, among them Level 2 from a clone of the
+tag and from the published package; see the
+[post-release evidence](#v0230-post-release-evidence). No Level 3 cycle and
 no targeted live check has run on Pi SDK `1.6.0`.
 
 Release notes state which levels were run for a release and what was not
@@ -2679,6 +2684,51 @@ image) reported `writer_accepted` from 09:48 to 09:51 UTC. Client-target
 all 14 writers. Doctor reported no error, only `workspace_mode_unset` for one
 workspace without a mode.
 
+### v0.23.0 post-release evidence
+
+Recorded for the published release `0.23.0`, released on 2026-11-22. This
+section holds the checks of the published artifacts; the upgrades of the real
+installations are not part of it yet.
+
+The annotated tag `v0.23.0` (tag object `6b0f46f`) points to
+`31ff573dec6ffafd26a040e6695cdf51db58dfdb`, the merge commit of PR #315 on
+`main` and the package's `gitHead`. CI passed on that commit (run
+45023904884), CodeQL passed on it (run 45023904492) and CI passed on the tag
+(run 45024432660).
+
+- npm: `pi-session-mcp@0.23.0` is `latest`, with the shasum
+  `f4bdd78c8e7f77e035894824b92a926f16f39e75`. The tarball downloaded from the
+  registry has the SHA-256
+  `b8f2713e570c1061124f8147630267d58ca4d1558b931827ceef6ec037c2d0fc`, which is
+  the checksum that PR #315 records for its head `79b9e44`: the published
+  package is the archive that was accepted on that head.
+- GitHub release `v0.23.0`, with `install.sh` (SHA-256
+  `28698c683f5440e53a9c976a8e74bfae6620927f1ea98a330cb865ea49cd1178`) and
+  `install.sh.sha256`. Both were downloaded after publication: the checksum
+  matched, and `install.sh` is byte-identical to the tag's file.
+
+Runs of the published release, with Codex CLI `0.171.0` and Claude Code
+`2.1.330`:
+
+- A fresh clone of the tag: Level 1 passed, with 197 test files, 5375 passed
+  and 15 skipped. `npm audit` and `npm audit --omit=dev` reported 0
+  vulnerabilities, and Doctor reported `packageVersion` `0.23.0`. Level 2
+  passed with 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`.
+- The published package, installed into a fresh prefix: the install exited
+  with `0` and the install smoke reported `smoke_passed`. The files of `dist/`
+  have the same digest as in the clone of the tag. All eight
+  `@earendil-works` packages of the SDK family resolve at `1.6.0`. Level 2
+  passed with 160 of 160 checks with delivery off and 228 of 228 with
+  `--events spool`.
+
+No Level 3 cycle and no targeted live check ran on Pi SDK `1.6.0`.
+
+Still not established for `0.23.0`, beyond what the
+[pre-release record](#v0230-pre-release-acceptance) names, which this section
+does not change: the upgrades of the real installations are not recorded
+here.
+
 ### v0.23.0 pre-release acceptance
 
 `v0.23.0` was checked on 2026-11-22 from 12:07 to 12:12 UTC on its release
@@ -2755,6 +2805,23 @@ coding session's `read` against a real provider; a profile with
 starts; a provider store with a stored key; the Claude Code wake; container
 writers; the server host; macOS outside CI; and the published-release Level 2
 and the upgrades of the real installations, which follow after publishing.
+
+### v0.22.2 post-release evidence
+
+Recorded for the published release `0.22.2`, released on 2026-11-17.
+
+- Published-release Level 2, from a fresh clone of the tag `v0.22.2` and from
+  the published npm package: each source passed 160 of 160 checks with
+  delivery off and 228 of 228 with `--events spool`.
+- Installations: both were upgraded from `0.22.1` to `0.22.2` on 2026-11-18.
+  Doctor reported no error, every writer was `writer_accepted` and then
+  `mcp_verified` on the first attempt (22 writers on one installation and 16 on
+  the other), and both client targets verified (`mcp_verified`). No stored
+  format changed.
+
+This section adds no live check on the release. What the
+[pre-release record](#v0222-pre-release-acceptance) names as not established
+stays so, except the published-release Level 2 and the upgrades above.
 
 ### v0.22.2 pre-release acceptance
 
