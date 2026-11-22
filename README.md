@@ -159,6 +159,7 @@ The [threat model](docs/threat-model.md) states the assumptions and limits, incl
 | [Pi skills](docs/skills.md) | [Doctor contract](docs/doctor-design.md) | [Contributing](CONTRIBUTING.md) |
 | [Session MCP tools](docs/session-mcp.md) | [Decision records](docs/adr/README.md) | [Security policy](SECURITY.md) |
 | [Session history](docs/session-history.md) | | [Changelog](CHANGELOG.md) |
+| [Writer images](docs/writer-images.md) | | |
 
 ## Development
 
