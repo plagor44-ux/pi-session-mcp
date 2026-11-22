@@ -71,6 +71,20 @@ it.each([["assume-unchanged", "--assume-unchanged"], ["skip-worktree", "--skip-w
   expect(await inspectWriter(f.ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_uncollected", counts: { ...ZERO, changes: 1 } });
 }, 60_000);
 
+it("does not count a skip-worktree path that is absent from the worktree on purpose", async () => {
+  const f = await fixture();
+  await f.commit("sparse file", "sparse.txt", "s\n");
+  await f.work("reset", "--hard", f.baseCommit);
+  await f.commit("sparse file", "sparse.txt", "s\n");
+  await f.work("update-index", "--skip-worktree", "sparse.txt");
+  await rm(join(f.paths.clone, "sparse.txt"));
+  expect(await f.work("status", "--porcelain")).toBe("");
+  expect((await inspectWriter(f.ctx, "repo-w1")).counts?.changes).toBe(0);
+  // A real deletion next to it still counts, once.
+  await rm(join(f.paths.clone, "base.txt"));
+  expect((await inspectWriter(f.ctx, "repo-w1")).counts?.changes).toBe(1);
+}, 60_000);
+
 it("counts a tracked file that was deleted in the worktree", async () => {
   const f = await fixture();
   await rm(join(f.paths.clone, "base.txt"));
