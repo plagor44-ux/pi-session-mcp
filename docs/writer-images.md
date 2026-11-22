@@ -127,8 +127,17 @@ lost on every launch (see the Bun example).
 With `--network=pasta` the writer can reach the network, which is how package
 downloads work at run time; it is not a limited network. With `--network=none`
 nothing can be downloaded, so the image must already contain everything the
-work needs. See [Execution modes](execution-modes.md#modes-and-risks) for the
-risks.
+work needs.
+
+**`--network=none` also cuts the session off from its model provider.** The
+relay forwards each prompt to the server running inside the writer container,
+and that server makes the provider calls itself. In a container without a
+network it cannot perform a turn against a remote provider, however complete
+the image is. The provider-free acceptance makes no provider request, so a
+writer can pass acceptance and verification with `none` and still be unable to
+work. Choose `pasta` for a writer that must run a model session, and weigh its
+risks in [Execution modes](execution-modes.md#modes-and-risks); `none` only
+suits an image you use for checks that need no model.
 
 ## 3. How to build
 
@@ -356,16 +365,26 @@ provisioning command with a new `--image`, the repository step reports
 mode, and leaves the writers as they are. The same holds for a changed
 `--cache`. To adopt the new settings:
 
-1. Build and check the new image. **Keep the old image** until the last step:
+1. Build and check the new image. **Keep the old image** until step 6:
    collection and removal still run inside the image a writer recorded.
 2. Close the sessions on the writer. Collect its work with
    `pi-session-mcp-setup --writer <name> --collect --apply` and review the
    collected refs in your own checkout.
-3. Run `pi-session-mcp-setup --writer <name> --remove`. It removes immediately;
-   it is not a dry run, and it refuses uncollected work.
-4. Run the provisioning command again with the full settings and the new
+3. Preserve what collection does not cover. Collection and the work check that
+   guards `--remove` see only what Git in the clone counts as work: commits,
+   staged and unstaged changes, untracked files that are not ignored, and the
+   stash. **Files under ignored paths are neither inspected nor exported**,
+   whatever `--clean` says: `.venv`, `node_modules`, a local `.env`, build
+   output and any other ignored file are deleted with the writer, together
+   with its per-writer cache. Copy out anything you cannot regenerate before
+   you go on (see [Execution modes](execution-modes.md#writer-storage-launch-and-readiness)
+   for where a writer keeps its clone). Do not run Git there.
+4. Run `pi-session-mcp-setup --writer <name> --remove`. It removes immediately;
+   it is not a dry run. Without `--discard` it refuses only work that the
+   collection check covers, and never warns about ignored files.
+5. Run the provisioning command again with the full settings and the new
    `--image <image-id>`, first as a dry run, then with `--apply`.
-5. Once no writer records the old ID, remove the old image with `podman rmi`.
+6. Once no writer records the old ID, remove the old image with `podman rmi`.
 
 `--recreate` and `--reset` keep the recorded image; neither adopts a new one.
 
@@ -392,5 +411,5 @@ With no archive, setup cannot collect work from that writer, because collection
 runs inside the missing image. If the clone holds nothing you need, or you
 already collected it, remove the writer with
 `pi-session-mcp-setup --writer <name> --remove --discard`, which loses anything
-uncollected, and provision it again from a new image as above. Never run host
-Git in a writer clone to rescue its work.
+uncollected and every ignored file, and provision it again from a new image as
+above. Never run host Git in a writer clone to rescue its work.
