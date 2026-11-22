@@ -2690,8 +2690,12 @@ there is no Level 3 cycle and no targeted live check on Pi SDK `1.6.0`. Every
 command below ran once on that candidate, except `npm pack`, which ran twice.
 The later commits change only this record, the
 [evaluation record](evaluation/release-0.23.0-2026-11-22/README.md) and the
-README status text. The evaluation record holds the commands with their exit
-codes.
+README status text, which the package contains. Level 1 and the packed-tarball
+Level 2 are therefore repeated on the head commit of the pull request, and the
+pull request names that head, their results, the `dist/` digest and the
+tarball checksum. This record does not hold the checksum, because recording it
+here would change the archive. The evaluation record holds the commands with
+their exit codes.
 
 The release `0.23.0` ships what `main` holds after `v0.22.2`: the move of the
 Pi SDK family from `1.5.2` to `1.6.0`
@@ -2723,10 +2727,8 @@ pull request, on the branch `chore/release-0.23.0` on top of `main` at
     configuration was set (`config_missing`); every other check was `ok`.
   - `git diff --check` exited with `0`, and `git status --short` printed
     nothing after the build.
-  - `npm pack` listed 1081 files (tarball shasum
-    `a8d3a5e407ab6913f2f3c376d978089d4f0efb92`, SHA-256
-    `e37364fc17823fec2a3dfe5d88b68b18f164f8327169c70b46737923fbb664ae`). A
-    second pack produced the same digests. The package holds no
+  - `npm pack` listed 1081 files. A second pack produced the same shasum and
+    SHA-256 as the first. The package holds no
     `docs/superpowers/` file, and a scan of the unpacked files for the
     absolute home path of the build host and the maintainer's address found
     none.

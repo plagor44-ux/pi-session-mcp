@@ -6,7 +6,12 @@ run on 2026-11-22 from 12:07 to 12:12 UTC on Linux 7.3 (`x64`) with Node.js
 `2.1.330`. The release moves the Pi SDK family from `1.5.2` to `1.6.0`. No
 live check ran on this build: there is no Level 3 cycle and no targeted live
 check on Pi SDK `1.6.0`. A result for this build is not evidence for another
-one. The summary is in the
+one. The record commits change files that the package contains (`docs/` and
+the README), so Level 1 and the packed-tarball Level 2 were repeated on the
+head commit of the release pull request. The pull request names that head,
+its results, the `dist/` digest and the tarball checksum; this file does not
+hold the checksum, because recording it here would change the archive that it
+describes. The summary is in the
 [acceptance record](../../acceptance.md#v0230-pre-release-acceptance).
 
 ## Candidate
@@ -57,11 +62,10 @@ audit result follows from the advisory database at that moment.
 
 ## Package
 
-- `npm pack` of the candidate: 1081 files, package size 1.7 MB, unpacked size
-  13.9 MB. Tarball SHA-256
-  `e37364fc17823fec2a3dfe5d88b68b18f164f8327169c70b46737923fbb664ae`, npm
-  shasum `a8d3a5e407ab6913f2f3c376d978089d4f0efb92`. A second `npm pack` of
-  the same commit, later in the run, produced the same SHA-256 and shasum.
+- `npm pack` of the candidate listed 1081 files. A second `npm pack` of the
+  same commit, later in the run, produced the same SHA-256 and shasum as the
+  first. The digests of the archive of the release pull request's head are in
+  the pull request.
 - The file list holds no `docs/superpowers/` file. A scan of the unpacked
   files for the absolute home path of the build host and for the maintainer's
   e-mail address found none.
