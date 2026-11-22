@@ -160,10 +160,18 @@ The same rules apply to the answers that the interview builds.
 Every guided report is a list of findings; `--json` prints them as
 `findings[].code`. Exit status: `0` for a successful run or a planned dry run,
 `1` for a refusal or failure, `64` for an input error, `130` or `143` after an
-interrupt. For each code, the action is one of: **fix** (the agent can correct
-it and rerun), **ask** (the owner must decide; see
-[Stop and ask the owner](#stop-and-ask-the-owner)) or **stop** (report and end
-the run).
+interrupt. For each code, the action for the agent is one of:
+
+- **continue**: not a failure; carry on, and report the finding.
+- **fix**: the agent can correct the cause and rerun.
+- **ask**: stop and ask the owner; the owner must decide (see
+  [Stop and ask the owner](#stop-and-ask-the-owner)). Change nothing meanwhile.
+- **stop**: fail and report; end the run and tell the owner the code and its
+  target. Do not retry or work around it.
+
+A dry run that ends `planned` with exit status `0` is not an approval to
+apply: show its findings and the [preview](#preview-for-the-owner) to the
+owner first.
 
 | Code | Meaning | Action |
 | --- | --- | --- |
@@ -199,18 +207,18 @@ the run).
 | `operation_interrupted` | SIGINT or SIGTERM | stop |
 | `operation_failed` | Unclassified failure | stop |
 | `setup_not_found` | Reported by `install.sh`: `pi-session-mcp-setup` is not on `PATH` | ask |
+| `configuration_planned`, `mode_planned`, `registration_planned`, `probe_planned` | Dry run only: this step would run on an apply (status `planned`). `probe_planned` spends nothing in a dry run; an apply probes each new profile once | continue: show the plan and the preview to the owner |
+| `configuration_installed` | Apply: the configuration (and routing) file was written, after a timestamped backup of an existing one | continue |
+| `configuration_unchanged` | The files already match the answers; nothing to write | continue |
+| `probe_passed` | A new profile's probe succeeded (apply) | continue |
+| `profile_dropped` | A failed probe removed a profile that is not the default; the `cause` names the probe outcome | continue: report it with its `cause`; ask only when `coding_profiles_dropped` or `container_profiles_empty` follows |
+| `podman_unavailable`, `bubblewrap_unavailable` | Prerequisite notes: container mode, or the sandboxed shell, is unavailable on this machine. They do not stop the run | continue: tell the owner if their answers rely on it |
 
-Non-failing findings: `configuration_planned`, `configuration_unchanged` and
-`configuration_installed` (the configuration step; `unchanged` means nothing
-to write), `probe_planned` and `probe_passed` (new profiles), `profile_dropped`
-(a failed probe removed a profile that is not the default; the `cause` names
-the probe outcome), `mode_planned` and `registration_planned` (dry run), and
-the prerequisite notes `podman_unavailable` and `bubblewrap_unavailable`: they
-say that container mode or the sandboxed shell is unavailable on this machine,
-and do not stop the run. Findings of the mode, registration and verification
-steps carry the codes of those steps ([execution modes](execution-modes.md),
-[client setup](client-setup.md)) under the targets `modes`, `registrations` and
-`verification`.
+Findings of the mode, registration and verification steps carry the codes of
+those steps ([execution modes](execution-modes.md), [client setup](client-setup.md))
+under the targets `modes`, `registrations` and `verification`: an `ok` or
+`unchanged` finding means continue; a failed one is reported with `mode_failed`,
+`registration_failed` or `verification_failed` (stop).
 
 ```sh
 pi-session-mcp-setup --guided --answers /path/to/answers.json --json
