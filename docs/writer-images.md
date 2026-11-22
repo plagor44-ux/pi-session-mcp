@@ -87,10 +87,26 @@ and on nothing else the host happens to have:
   directory), `/tmp` as a 512 MiB tmpfs and `HOME=/pi/home` as a 64 MiB tmpfs.
   Both tmpfs directories start empty on every launch. Throwaway clone and
   collection containers use a 1 GiB `/tmp`, no network and the same read-only root.
-- Fixed environment: `HOME`, `PI_SESSION_MCP_CONFIG`, `PI_CODING_AGENT_DIR` and
-  `PI_SESSION_MCP_WRITER_GUARD`. No host environment variable is passed
-  through, and setup sets no `PATH`, proxy, `GOPROXY`, `GOFLAGS` or similar
-  variable. Everything else comes from the image's own `ENV`.
+- Environment that setup sets explicitly (`-e`): `HOME`, `PI_SESSION_MCP_CONFIG`,
+  `PI_CODING_AGENT_DIR` and `PI_SESSION_MCP_WRITER_GUARD`, a variable naming
+  the event spool directory when event delivery is enabled, and the cache
+  variables in the table below. Setup passes no host environment variable by
+  name, and it sets no `PATH`, `GOPROXY`, `GOFLAGS` or similar variable.
+  Everything else comes from the image's own `ENV`.
+- **Exception: proxy variables.** Setup does not pass `--http-proxy=false`, so
+  Podman's default applies: it copies the proxy variables of the Podman client's
+  own environment (`http_proxy`, `https_proxy`, `ftp_proxy` and `no_proxy`, in
+  either case) into every container it starts. The writer that the relay starts
+  for a session gets a filtered environment (`HOME`, `PATH` and
+  `XDG_RUNTIME_DIR`), but setup's own Podman calls (clone, collect, reset,
+  recreate and recovery) and the acceptance harness run with the environment of
+  the shell that runs setup. A proxy URL set there, including any user name and
+  password in it, is therefore visible inside those containers, including the
+  throwaway ones that have no network. Do not keep credentials in proxy
+  variables in the shell that runs setup, and do not make an image depend on
+  them. A check for this guide confirmed the Podman behavior: a container
+  started with `HTTPS_PROXY` set on the client saw the full URL, and
+  `--http-proxy=false` removed it.
 - One optional per-writer cache, chosen by `--cache`. It lives outside the clone,
   is never shared between writers, survives reset, finish and recreate, and is
   removed with the writer:
