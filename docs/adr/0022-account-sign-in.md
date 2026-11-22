@@ -32,7 +32,7 @@ Everything after the sign-in already works, because a Pi sign-in is the
   writer's boundary `auth.json` without the refresh token and refreshes the
   host credential beforehand (#142).
 
-The pinned Pi SDK 1.5.2 provides the sign-in itself:
+The pinned Pi SDK 1.6.0 provides the sign-in itself:
 
 - Nine built-in providers declare account sign-in through an `auth.oauth`
   entry on the provider objects that the package-root
