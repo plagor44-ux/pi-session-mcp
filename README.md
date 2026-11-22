@@ -1,4 +1,9 @@
-# pi-session-mcp
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset=".github/assets/readme-header-dark.png">
+    <img alt="pi-session-mcp" src=".github/assets/readme-header-light.png" width="100%">
+  </picture>
+</h1>
 
 [![CI](https://github.com/plagor44-ux/pi-session-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/plagor44-ux/pi-session-mcp/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/pi-session-mcp)](https://www.npmjs.com/package/pi-session-mcp)
