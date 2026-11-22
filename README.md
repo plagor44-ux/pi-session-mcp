@@ -92,6 +92,29 @@ The script then runs the guided setup. The interview proposes profiles from Pi's
 - Configuration format: [Configure](docs/installation.md#2-configure).
 - Upgrades and removal: [Upgrade](docs/installation.md#upgrade) and [Remove](docs/installation.md#remove).
 
+## Recommended setup for coding agents
+
+A coding agent can do two jobs here: install Pi Session MCP for its owner, and then control Pi workers through it. Each has its own guide; this section gives the order and the boundaries.
+
+**Installing on the owner's behalf.** Do not run `install.sh`: it applies directly after installing, has no dry run and needs an interactive terminal unless you pass `--answers`. Instead:
+
+1. Check whether the package is installed already: `npm ls -g pi-session-mcp --depth=0 --json`. If it is not, install it from npm with an exact version, `npm install -g pi-session-mcp@<version>`. If the same version is there, reuse it. If another version is there, this is an upgrade: stop and take the owner-approved [upgrade procedure](docs/installation.md#upgrade), which starts by closing the client sessions; installing over it first can leave registrations bound to the old release. Then read the offline model catalog with `pi-session-mcp-setup --list-models --json`.
+2. Write an answers file and run the guided setup as a dry run: `pi-session-mcp-setup --guided --answers <file> --json`. Show the owner the plan and the findings.
+3. Add `--apply` only after the owner has approved that exact plan.
+4. Verify with `pi-session-mcp-doctor --json` and `pi-session-mcp-setup --verify --target <client-target>` (for example `claude-code:user:pi-session-mcp` or `codex:user:pi-session-mcp`).
+
+The owner does these steps, never the agent: the provider sign-in `pi-session-mcp-provider auth login <provider>`, key entry with `pi-session-mcp-provider auth set <provider>`, any second-factor prompt of the provider, and the approvals that spend money or widen access (provider probes, changing an existing configuration, host writes). An agent never asks for, handles or stores a credential. See the [agent install guide](docs/agent-install.md).
+
+**Recommended setup for a controlling agent (Claude Code or Codex).**
+
+- **Review on read-only profiles**, and from a different model family than the author of the change. The default profile must be read-only. Tier routing can enforce the family rule for routed reviews with `authorFamily` ([tool contracts](docs/tool-contracts.md)).
+- **Coding in container workspaces on Linux**, where each coding session leases a rootless-Podman writer with its own full clone ([execution modes](docs/execution-modes.md)). Host writes need the owner's explicit acceptance.
+- **The bundled controller skills**, installed into the client by setup ([Pi skills](docs/skills.md#install-the-controller-skills-into-codex-and-claude-code)): `pi-session-orchestration` covers choosing aliases, scoping a task, running workers in parallel, polling, verifying results independently and closing sessions; `pi-session-profiles` covers creating, changing and retiring profiles, a bounded provider probe, safe writer replacement and reporting.
+- **Optional tier routing**, to let the server pick a profile within a tier for a role ([Operate routing](docs/installation.md#operate-routing)).
+- **A writer image beyond the built-in `node`**, for example with a Go toolchain: [Building a custom writer image](docs/writer-images.md), and for an agent that does it on the owner's behalf, the [agent guide to writer images](docs/agent-writer-image.md).
+
+**When to stop and ask the owner.** Setup changes, provider sign-in, spending, host writes, removing or replacing a writer and anything that deletes work are the owner's decisions. The stop lists are in the [agent install guide](docs/agent-install.md#stop-and-ask-the-owner) and the [agent guide to writer images](docs/agent-writer-image.md#stop-and-ask-the-owner). Judge a guided dry run by its overall `status` and `exitCode` and by the status of each finding. A run that ends `planned` with exit code `0` is the plan: its `planned` findings (for example `configuration_planned`, `probe_planned`, `mode_planned` and `registration_planned`) and its `unchanged` ones (for example `configuration_unchanged`, or `podman_unavailable` and `bubblewrap_unavailable` for optional features the host lacks) do not block; show the plan to the owner. A blocker that the agent install guide lists, a finding with the status `failed`, `divergent` or `unsupported`, or a non-zero exit code means stop, and so does anything you cannot place: stop and ask. The writer image guide has its own tables of codes that continue and codes that stop.
+
 ## Tools
 
 | Tool | Purpose |
@@ -159,6 +182,7 @@ The [threat model](docs/threat-model.md) states the assumptions and limits, incl
 | [Pi skills](docs/skills.md) | [Doctor contract](docs/doctor-design.md) | [Contributing](CONTRIBUTING.md) |
 | [Session MCP tools](docs/session-mcp.md) | [Decision records](docs/adr/README.md) | [Security policy](SECURITY.md) |
 | [Session history](docs/session-history.md) | | [Changelog](CHANGELOG.md) |
+| [Writer images](docs/writer-images.md) | | |
 
 ## Development
 

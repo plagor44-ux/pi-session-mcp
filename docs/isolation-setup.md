@@ -59,7 +59,8 @@ it participates in settings drift, not the acceptance fingerprint.
 - Review setup's dry-run before applying. Image `node` resolves a built-in digest
   pin and can be pulled on apply if absent; an operator-supplied image must be
   present locally and named by its full 64-character lowercase hex image ID.
-  A custom image needs Node, Git, bash, ssh and coreutils for the acceptance harness.
+  A custom image needs Node, Git, bash, ssh and coreutils for the acceptance harness;
+  see [Building a custom writer image](writer-images.md).
 
 ## What setup automates
 
@@ -314,7 +315,8 @@ The Go-toolchain writer uses an operator-supplied local **image ID** with
 `--image <image-id> --cache go`, recording `cache: "go"` in container settings.
 Mode requests rebuild options from supplied values/defaults: repeat the image
 and cache flags each time. The Go mount is `/pi/go`, with GOPATH, GOCACHE and
-`GOTOOLCHAIN=local`; setup does not build the operator's toolchain image.
+`GOTOOLCHAIN=local`; setup does not build the operator's toolchain image. See
+[Building a custom writer image](writer-images.md) for how to build one.
 
 A Python writer using uv and npm uses `--image <image-id> --cache uv`, which
 records `cache: "uv"` and mounts a private per-writer directory at `/pi/uv`

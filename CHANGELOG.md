@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Changed
+
+- Documentation only, no runtime change: new guide
+  [Building a custom writer image](docs/writer-images.md) for operators of
+  container workspaces. It covers what `--image` accepts (the built-in `node`
+  or a local 64-character image ID, never a tag, never pulled), what an image
+  must contain and what the writer mounts and sets at run time, how to build
+  from the built-in image's digest-pinned base with rootless Podman,
+  example Containerfiles for Go, Python with uv and Bun and a note on starting
+  a database, a verification checklist, and what a new image ID means for
+  existing writers and how to recover from `image_missing`. The repository
+  still ships no Containerfile and no prebuilt image. Linked from
+  [Isolation setup](docs/isolation-setup.md),
+  [Execution modes](docs/execution-modes.md), [Installation](docs/installation.md)
+  and the README.
+  A second page, [Agent guide to building and adopting a writer image](docs/agent-writer-image.md),
+  is for agents that do this on the owner's behalf: what needs the owner's
+  approval, the order of commands with `--json`, which setup result codes mean
+  stop or continue, and the evidence to report; it is linked from
+  [Agent guide to guided installation](docs/agent-install.md).
+  The README gains a section "Recommended setup for coding agents": how an
+  agent installs without `install.sh`, what the owner does alone, the
+  recommended setup of a controlling agent and where the stop lists are.
+
 ## 0.23.0 — 2026-11-22
 
 Minor release: the Pi SDK family moves from 1.5.2 to 1.6.0. The maintainer
