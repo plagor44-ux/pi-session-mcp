@@ -1226,7 +1226,8 @@ repository step between the install and the client targets:
    coding profile selects an overridden or unshipped `builtin:` skill as
    `container_profile_unsupported`. Such a writer stays `writer_not_ready`
    until you change the profile or remove the override, or collect it,
-   `--writer <name> --remove` it and provision it again
+   `--writer <name> --remove` it (at once, with no dry run; check it with
+   `--writer <name> --inspect` first) and provision it again
    ([Isolation setup](isolation-setup.md)).
 3. `--apply` and `--verify` the client targets, then `--writer <name> --verify`
    for each writer. Reconnect the host `pi-session-mcp` server when the repository
@@ -1281,8 +1282,9 @@ for it.
 Releases up to 0.11.4 accepted only writers whose phase was not ready, so a
 ready writer stayed `writer_not_ready` after the upgrade
 ([#130](https://github.com/plagor44-ux/pi-session-mcp/issues/130)). With such a
-release on the new side, collect the writer's work, `--writer <name> --remove`
-it, and provision it again.
+release on the new side, collect the writer's work, check it with
+`--writer <name> --inspect`, `--writer <name> --remove` it (at once, with no
+dry run), and provision it again.
 
 ### Release checkout
 
@@ -1337,7 +1339,10 @@ pi-session-mcp-setup --remove --target claude-code:user:pi-session-mcp
 npm uninstall -g pi-session-mcp
 ```
 
-`--remove` deletes only a registration that `setup` owns. `--rollback` runs the
+`--remove` runs at once: it has no dry run and no `--apply`. (The same holds
+for `--writer <name> --remove`, which deletes the writer with its ignored
+files; look at a writer with `--writer <name> --inspect` first.) It deletes
+only a registration that `setup` owns. `--rollback` runs the
 same owned removal and reports `rolled_back`; use it to undo an apply. After
 every target reports `removed`, uninstall the package or delete the release
 directory, and delete the configuration file and

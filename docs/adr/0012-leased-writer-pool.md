@@ -116,6 +116,17 @@ acceptance and every provisioning reconciliation or recovery path run under the
 same fence for the whole operation, not after a separate busy check. A setup
 operation that cannot get the fence reports `writer_busy`.
 
+**Amendment (read-only inspection, [#317](https://github.com/plagor44-ux/pi-session-mcp/issues/317)).**
+`--writer <name> --inspect` is the one setup operation on a writer clone that
+mutates nothing. It still takes the fence and the setup lock: the inspection
+runs a contained Git over the clone, and a session that writes at the same time
+would make its answer meaningless. It runs the existing inspection
+(`inspectWork`, clone mounted read-only) and one more read-only counting run; it
+writes no writer state, in particular not the collection digest, and it takes no
+Doctor gate, so the check stays possible while setup is broken. A writer without
+recorded state is `writer_not_provisioned` and takes no lease. The operation
+does not change `--remove`, which still removes a clean writer at once.
+
 ### 4. Base selection
 
 - The controller selects work by base branch, not by writer. `pi_session_start`

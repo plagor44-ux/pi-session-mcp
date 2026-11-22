@@ -36,7 +36,8 @@ default (`clean: "untracked"`); an ephemeral writer's finish recreates the
 clone. Add `--clean all` to a container mode request to remove
 them with `git clean -ffdx`; the per-writer `/pi/go`, `/pi/uv` and `/pi/npm` caches outside
 the clone stay untouched. Changing this setting requires collecting work,
-removing the writer with `--writer <name> --remove`, and provisioning again;
+removing the writer with `--writer <name> --remove` (which removes at once and has
+no dry run; check with `--writer <name> --inspect` first), and provisioning again;
 it participates in settings drift, not the acceptance fingerprint.
 
 ## Prerequisites

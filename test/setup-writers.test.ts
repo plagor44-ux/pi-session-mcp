@@ -44,6 +44,7 @@ async function fixture() {
       await writeFile(join(paths.config, "pi-session-mcp.json"), JSON.stringify(lifecycle.renderContainedConfig("x", paths.clone, input.rawConfig, input.settings.profiles, input.overrideDirectory)));
       return { status: "ok" as const, code: "writer_provisioned" };
     }),
+    inspectWriter: vi.fn(async (): Promise<lifecycle.InspectOutcome> => ({ status: "ok" as const, code: "writer_clean", counts: { commits: 0, branches: 0, stashes: 0, unexportedRefs: 0, changes: 0, untracked: 0, ignored: 0, nestedRepositories: 0 } })),
     inspectWork: vi.fn(async () => ({ baseline: true, digest: "digest", branches: [], dirty: false, stashes: [], unknownRefs: 0, indexTree: "c".repeat(40), tree: "c".repeat(40), headTree: "c".repeat(40) })),
     removeWriter: vi.fn(async (_ctx, name) => { calls.push(`remove:${name}`); return { status: "ok" as const, code: "writer_removed" }; }),
     finishWriter: vi.fn(async (): Promise<lifecycle.WriterOutcome> => { calls.push("collect", "reset"); return { status: "ok" as const, code: "writer_reset" }; }),
@@ -1003,11 +1004,80 @@ describe("writer setup arguments", () => {
     ["--writer", "x-w1", "--collect", "--target", "codex:user:pi-session-mcp"],
     ["--writer", "x-w1", "--collect", "--base", "main"],
     ["--writer", "../secret", "--verify"],
+    ["--writer", "x-w1", "--inspect", "--apply"],
+    ["--writer", "x-w1", "--inspect", "--dry-run"],
+    ["--writer", "x-w1", "--inspect", "--discard"],
+    ["--writer", "x-w1", "--inspect", "--base", "main"],
+    ["--writer", "x-w1", "--inspect", "--collect"],
+    ["--writer", "x-w1", "--inspect", "--remove"],
+    ["--inspect"],
   ])("rejects invalid combinations %j", (...args) => expect(() => parseSetupArgs(args)).toThrow());
+  it("parses inspect as an immediate, read-only operation", () => {
+    expect(parseSetupArgs(["--writer", "x-w1", "--inspect"]).writer).toEqual({ name: "x-w1", operation: "inspect", apply: true, discard: false });
+    expect(parseSetupArgs(["--writer", "x-w1", "--inspect", "--json"]).json).toBe(true);
+  });
   it("parses finish apply", () => expect(parseSetupArgs(["--writer", "x-w1", "--finish", "--apply"]).writer).toEqual({ name: "x-w1", operation: "finish", apply: true, discard: false }));
   it("rejects macOS before reading configuration", async () => {
     const output = await runWriterOperation("x-w1", "collect", { apply: false, discard: false }, { configPath: "/secret", releaseRoot: "/secret", platform: "darwin" });
     expect(output.findings[0]?.code).toBe("platform_unsupported");
     expect(JSON.stringify(output)).not.toContain("/");
+  });
+});
+
+describe("writer inspection", () => {
+  const counts = { commits: 2, branches: 1, stashes: 0, unexportedRefs: 0, changes: 0, untracked: 3, ignored: 5, nestedRepositories: 0 };
+  it("reports the inspection with its counters as operation inspect, under the setup lock and the writer lease, without a Doctor gate", async () => {
+    const f = await fixture();
+    await writeWriterState(f.home, "x-w1", state(1));
+    f.life.inspectWriter.mockResolvedValueOnce({ status: "failed", code: "writer_uncollected", counts });
+    const doctor = vi.fn(f.deps.doctor!);
+    const output = await runWriterOperation("x-w1", "inspect", { apply: true, discard: false }, { ...f.deps, doctor });
+    expect(output.operation).toBe("inspect");
+    expect(output.exitCode).toBe(1);
+    expect(output.findings).toEqual([{ target: { client: "writer", scope: "x", alias: "x-w1" }, status: "failed", code: "writer_uncollected", counts }]);
+    expect(f.deps.lock).toHaveBeenCalledTimes(1);
+    expect(doctor).not.toHaveBeenCalled();
+    expect(f.life.inspectWriter).toHaveBeenCalledTimes(1);
+    expect(f.life.removeWriter).not.toHaveBeenCalled();
+    expect(f.life.collectWriter).not.toHaveBeenCalled();
+  });
+  it("exits 0 for a clean writer", async () => {
+    const f = await fixture();
+    await writeWriterState(f.home, "x-w1", state(1));
+    const output = await runWriterOperation("x-w1", "inspect", { apply: true, discard: false }, f.deps);
+    expect(output.exitCode).toBe(0);
+    expect(output.findings[0]).toMatchObject({ status: "ok", code: "writer_clean" });
+  });
+  it("names an unknown repository alias", async () => {
+    const f = await fixture();
+    const output = await runWriterOperation("nosuch-w1", "inspect", { apply: true, discard: false }, f.deps);
+    expect(output.findings.map((finding) => finding.code)).toEqual(["alias_unknown"]);
+    expect(output.exitCode).toBe(1);
+    expect(f.life.inspectWriter).not.toHaveBeenCalled();
+  });
+  it("names a writer that was never provisioned without taking its lease or fencing it", async () => {
+    const f = await fixture();
+    const lease = vi.fn(f.deps.lease ?? (async () => ({ fd: 3, release: async () => {} })));
+    const ensureAbsent = vi.fn(async () => {});
+    const output = await runWriterOperation("x-w1", "inspect", { apply: true, discard: false }, { ...f.deps, lease, ensureAbsent });
+    expect(output.findings.map((finding) => finding.code)).toEqual(["writer_not_provisioned"]);
+    expect(output.exitCode).toBe(1);
+    expect(lease).not.toHaveBeenCalled();
+    expect(ensureAbsent).not.toHaveBeenCalled();
+    expect(f.life.inspectWriter).not.toHaveBeenCalled();
+  });
+  it("names a writer whose lease a controller holds", async () => {
+    const f = await fixture();
+    await writeWriterState(f.home, "x-w1", state(1));
+    const lease = vi.fn(async () => { throw new WriterLeaseError("writer_busy"); });
+    const output = await runWriterOperation("x-w1", "inspect", { apply: true, discard: false }, { ...f.deps, lease });
+    expect(output.findings.map((finding) => finding.code)).toEqual(["writer_busy"]);
+    expect(f.life.inspectWriter).not.toHaveBeenCalled();
+  });
+  it("leaves out anything but plain counters", async () => {
+    const f = await fixture();
+    await writeWriterState(f.home, "x-w1", state(1));
+    f.life.inspectWriter.mockResolvedValueOnce({ status: "ok", code: "writer_clean", counts: { commits: 1, "/etc/passwd": 1, bad: -1, fraction: 1.5 } as never });
+    expect((await runWriterOperation("x-w1", "inspect", { apply: true, discard: false }, f.deps)).findings[0]?.counts).toEqual({ commits: 1 });
   });
 });

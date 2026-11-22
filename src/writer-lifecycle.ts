@@ -411,6 +411,89 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
   };
 }
 
+/** Path-free counters of what a clone holds beyond its recorded base (see `inspectWriter`). */
+export interface InspectCounts {
+  /** Commits on any local branch that the recorded base does not contain. */
+  commits: number;
+  /** Local branches other than the recorded base branch. */
+  branches: number;
+  stashes: number;
+  /** Refs outside branches and the stash that name objects the operator checkout does not hold. */
+  unexportedRefs: number;
+  /** Tracked files that differ from HEAD. */
+  changes: number;
+  untracked: number;
+  /** Untracked files that Git ignores: collection never exports them, remove deletes them. */
+  ignored: number;
+  /** `.git` entries below the top level, ignored paths included. */
+  nestedRepositories: number;
+}
+export type InspectOutcome = WriterOutcome & { counts?: InspectCounts };
+
+/**
+ * Counters for `inspectWriter`, from a second read-only boundary run: the clone is mounted read-only and Git works on a
+ * copy of the index under `/tmp`. Each list is written to a file first, so a failing Git command fails the script instead
+ * of counting zero. Paths stay NUL-separated and are only counted, never read back.
+ */
+const COUNT_SCRIPT = `set -eu
+export GIT_CONFIG_NOSYSTEM=1
+cp .git/index /tmp/index
+export GIT_INDEX_FILE=/tmp/index
+count() { tr -cd '\\0' < "$1" | wc -c | tr -d ' '; }
+lines() { wc -l < "$1" | tr -d ' '; }
+${BOUNDARY_GIT} rev-list --count --branches --not "$1" > /tmp/commits
+${BOUNDARY_GIT} diff --no-ext-diff --no-textconv -z --name-only HEAD > /tmp/changes
+${BOUNDARY_GIT} ls-files -z --others --exclude-standard > /tmp/untracked
+${BOUNDARY_GIT} ls-files -z --others --ignored --exclude-standard > /tmp/ignored
+if ${BOUNDARY_GIT} rev-parse -q --verify refs/stash > /dev/null; then ${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash > /tmp/stashes; else : > /tmp/stashes; fi
+find . -path ./.git -prune -o -name .git ! \\( -type f -size 0c \\) -print > /tmp/repositories
+printf 'commits %s\\n' "$(tr -d ' \\n' < /tmp/commits)"
+printf 'changes %s\\n' "$(count /tmp/changes)"
+printf 'untracked %s\\n' "$(count /tmp/untracked)"
+printf 'ignored %s\\n' "$(count /tmp/ignored)"
+printf 'stashes %s\\n' "$(lines /tmp/stashes)"
+printf 'nestedRepositories %s\\n' "$(lines /tmp/repositories)"`;
+
+async function countWork(ctx: WriterContext, name: string, state: WriterState): Promise<Pick<InspectCounts, "commits" | "changes" | "untracked" | "ignored" | "stashes" | "nestedRepositories">> {
+  const paths = writerPaths(ctx.home, name);
+  const result = await ctx.runner.run("podman", throwawayArgs(name, paths, state.imageId, { clone: "ro", bundles: false }, COUNT_SCRIPT, [state.base.commit]), AbortSignal.timeout(IMAGE_PULL_TIMEOUT_MS));
+  if (result.exitCode !== 0) throw new LifecycleError("writer_inspect_failed");
+  const values = new Map<string, number>();
+  for (const line of result.stdout.trim().split("\n")) {
+    const [key, value, extra] = line.split(" ");
+    if (!key || !value || extra !== undefined || !/^[0-9]{1,15}$/.test(value) || values.has(key)) throw new LifecycleError("writer_inspect_failed");
+    values.set(key, Number(value));
+  }
+  const keys = ["commits", "changes", "untracked", "ignored", "stashes", "nestedRepositories"] as const;
+  if (values.size !== keys.length || !keys.every((key) => values.has(key))) throw new LifecycleError("writer_inspect_failed");
+  return { commits: values.get("commits")!, changes: values.get("changes")!, untracked: values.get("untracked")!, ignored: values.get("ignored")!, stashes: values.get("stashes")!, nestedRepositories: values.get("nestedRepositories")! };
+}
+
+/**
+ * Read-only check for work that only this writer's clone holds (`--writer <name> --inspect`). It changes no state and
+ * removes nothing; the caller holds the writer lease. The verdict uses the same predicate as `removeWriter` without
+ * `--discard`, so `writer_clean` and `writer_collected` are exactly the cases where it would not refuse for work:
+ * - `writer_clean`: the clone equals the recorded base;
+ * - `writer_collected`: the work equals the last collection (its refs are in the operator checkout);
+ * - `writer_uncollected`: work that only the clone holds, or a nested repository change that collection cannot export;
+ * - `writer_nested_repository`: a repository below the top level that no export can preserve.
+ * Ignored files are reported in the counters only: they are not work for collection, but removal deletes them.
+ */
+export async function inspectWriter(ctx: WriterContext, name: string): Promise<InspectOutcome> {
+  ctx = leasedContext(ctx);
+  try {
+    const state = await readWriterState(ctx.home, name);
+    if (!state || state.phase === "provisioning") return { status: "failed", code: "writer_not_provisioned" };
+    if (state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");
+    const work = await inspectWork(ctx, name);
+    const counted = await countWork(ctx, name, state);
+    const counts: InspectCounts = { ...counted, branches: work.branches.filter(({ name: ref }) => ref !== state.base.ref).length, unexportedRefs: work.unknownRefs };
+    if (work.nested || (!work.baseline && state.collected?.digest !== work.digest)) return { status: "failed", code: "writer_uncollected", counts };
+    if (work.repositories) return { status: "failed", code: "writer_nested_repository", counts };
+    return { status: "ok", code: work.baseline ? "writer_clean" : "writer_collected", counts };
+  } catch (error) { return failure(error); }
+}
+
 async function requiredState(ctx: WriterContext, name: string): Promise<WriterState> {
   const state = await readWriterState(ctx.home, name);
   if (!state || state.alias !== ctx.alias) throw new LifecycleError("writer_state_invalid");

@@ -15,7 +15,7 @@ import { podmanCgroupControllers } from "./writer-boundary.js";
 import * as lifecycle from "./writer-lifecycle.js";
 import { recoverWriter } from "./writer-recover.js";
 import * as acceptance from "./writer-acceptance.js";
-import { writerName, writerPaths, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
+import { readWriterState, writerName, writerPaths, writersRoot, WRITER_NAME_PATTERN } from "./writer-state.js";
 import { codeFor, context, DoctorGateError, doctorGate, FENCE_CODES, fenced, GLOBAL_ERRORS, locked, modesTarget, plan, preflight, remove, services, targetFor, type WriterSetupDependencies } from "./setup-writers-common.js";
 import { gateBeforeWrite, inferBase, plannedWriters } from "./setup-writers-plan.js";
 import { reconcileUnlocked } from "./setup-writers-reconcile.js";
@@ -26,7 +26,7 @@ import { reconcileUnlocked } from "./setup-writers-reconcile.js";
  */
 
 export { SETUP_LEASE_WAIT_MS, type WriterSetupDependencies } from "./setup-writers-common.js";
-export type WriterOperation = "collect" | "recover" | "reset" | "recreate" | "finish" | "remove" | "verify";
+export type WriterOperation = "collect" | "inspect" | "recover" | "reset" | "recreate" | "finish" | "remove" | "verify";
 export interface WriterOptions { apply: boolean; discard: boolean; baseRef?: string; }
 
 /** Serializes planning, destructive-work refusal, mode commit and writer reconciliation. */
@@ -92,16 +92,25 @@ export async function changeWriterMode(configPath: string, request: ModeRequest,
 }
 
 export async function runWriterOperation(name: string, operation: WriterOperation, opts: WriterOptions, deps: WriterSetupDependencies): Promise<SetupResult> {
-  const reportOperation: SetupOperation = operation === "verify" ? "verify" : opts.apply ? operation === "remove" ? "remove" : "apply" : "dry-run";
+  const reportOperation: SetupOperation = operation === "verify" ? "verify" : operation === "inspect" ? "inspect" : opts.apply ? operation === "remove" ? "remove" : "apply" : "dry-run";
   if (!WRITER_NAME_PATTERN.test(name)) return result(reportOperation, [{ target: { client: "invalid", scope: "invalid", alias: "invalid" }, status: "failed", code: "usage_invalid" }], "failed", 64);
   const alias = name.slice(0, name.lastIndexOf("-w")), target = targetFor(alias, name);
-  const done = (outcome: lifecycle.WriterOutcome, hooks: readonly WakeHookOutcome[] = []) => result(reportOperation, [
+  const done = (outcome: lifecycle.InspectOutcome, hooks: readonly WakeHookOutcome[] = []) => result(reportOperation, [
     { target, ...outcome },
     ...hooks.map((hook) => ({ target, ...hook })),
   ], outcome.status === "planned" ? "planned" : undefined);
   if ((deps.platform ?? process.platform) !== "linux") return done({ status: "failed", code: "platform_unsupported" });
   try {
     if (!opts.apply && operation !== "verify") { await context(alias, deps); return done({ status: "planned", code: `writer_${operation}_planned` }); }
+    if (operation === "inspect") {
+      // Read-only, so no Doctor gate: the check must stay possible while setup is broken. A writer that was never provisioned has no lease or container to take.
+      return await locked(deps, async () => {
+        const ctx = await context(alias, deps);
+        const recorded = await readWriterState(ctx.home, name);
+        if (!recorded || recorded.phase === "provisioning") return done({ status: "failed", code: "writer_not_provisioned" });
+        return done(await fenced(ctx, name, deps, (leased) => services(deps).life.inspectWriter(leased, name)));
+      });
+    }
     return await locked(deps, async () => fenced(await context(alias, deps), name, deps, async (ctx) => {
       const { life } = services(deps);
       if (operation === "verify") {

@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Added
+
+- `pi-session-mcp-setup --writer <name> --inspect [--json]`: a read-only check
+  for work that only a container writer's clone holds
+  ([#317](https://github.com/plagor44-ux/pi-session-mcp/issues/317)). It reports
+  `writer_clean`, `writer_collected`, `writer_uncollected` or
+  `writer_nested_repository` with path-free counters (commits, branches,
+  stashes, unexported refs, tracked changes, untracked files, ignored files,
+  nested repositories), and the new code `writer_not_provisioned` for a writer
+  name that was never provisioned. It takes no `--apply`, changes no state, and
+  exits 1 for every code except `writer_clean` and `writer_collected`. The
+  setup report gains the operation `inspect` and an optional `counts` object on
+  a finding; the MCP tool contract is unchanged.
+
+### Changed
+
+- The bundled `pi-session-profiles` skill checks writers with `--inspect`
+  instead of `--remove`. The documentation now says at every place that
+  `--writer <name> --remove`, `--snapshot <alias> --remove` and the client
+  `--remove` run at once with no dry run and no `--apply`, and that removing a
+  writer deletes its ignored files. `--remove` itself is unchanged.
+
 ## 0.23.0 — 2026-11-22
 
 Minor release: the Pi SDK family moves from 1.5.2 to 1.6.0. The maintainer

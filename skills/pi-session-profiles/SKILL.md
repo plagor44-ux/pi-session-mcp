@@ -89,21 +89,27 @@ writer. Doctor's container checks and provisioning still have to pass.
 ## 6. Prepare writers
 
 For each container repository whose selected profiles or settings change,
-determine every writer's state using the documented read-only checks:
-Doctor's `writer_dirty` and `writer_uncollected_bundle`, and
-`pi-session-mcp-setup --writer <name> --collect` (dry run).
-Neither proves a clone clean: Doctor reads only `HEAD` and refs, and the dry
-run inspects nothing. The authoritative check is `--remove` without
-`--discard`, which inspects the clone, including its index, and refuses with
-`writer_uncollected` when it holds work.
+determine every writer's state with the read-only check
+`pi-session-mcp-setup --writer <name> --inspect --json`. It inspects the clone,
+including its index, changes nothing and needs no `--apply`. Doctor's
+`writer_dirty` and `writer_uncollected_bundle` are hints only: Doctor reads just
+`HEAD` and refs, and `--collect` without `--apply` inspects nothing.
+Act on the code of the finding: `writer_clean` and `writer_collected` hold no
+work that only the clone has; `writer_uncollected` and `writer_nested_repository`
+do (the counters say what), and `writer_not_provisioned`, `writer_busy` and any
+other code are not an answer. Exit status 1 with `writer_uncollected` is the
+check's answer, not a failure of the check. A non-zero `ignored` counter names
+files that collection never exports and that `--remove` deletes.
 If a writer to remove or re-provision has uncollected work or a dirty clone,
-or `--remove` refuses, stop and ask before anything goes live. Never run `--collect --apply` in this
-workflow, and never discard work to get past a refusal.
+stop and ask before anything goes live. Never run `--collect --apply` in this
+workflow, and never discard work to get past a refusal. Never use `--remove` as
+a check: it removes a clean writer at once, with no dry run and no `--apply`.
 
 Stop and report `writer_busy`, `podman_unavailable`, `registration_divergent`
 or any other refused writer step; do not work around it. For writers that
-hold no work, use `pi-session-mcp-setup --writer <name> --remove` before the
-live write. Do not run host Git inside a writer clone.
+hold no work (`writer_clean` or `writer_collected` from `--inspect`), use
+`pi-session-mcp-setup --writer <name> --remove` before the live write. It runs
+at once and cannot be undone. Do not run host Git inside a writer clone.
 
 ## 7. Go live
 

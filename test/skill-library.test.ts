@@ -43,7 +43,7 @@ describe("skill library", () => {
     for (const rule of ["Never read Pi credential or model files", "Never print environment values",
       "Never hand-edit `execution-modes.json`", "Never run `--collect --apply`", "Never guess",
       "at most one provider turn", "second provider turn", "stop and ask", "Never run a quality evaluation",
-      "pi-session-mcp-doctor --json", "--writer <name> --collect", "--writer <name> --remove",
+      "pi-session-mcp-doctor --json", "--writer <name> --inspect", "--writer <name> --remove",
       "--writer <name> --verify", "--repo <alias> --mode container --profiles <aliases> --apply",
       "docs/installation.md", "docs/skills.md", "docs/execution-modes.md", "docs/pi-extensions-design.md"])
       expect(text).toContain(rule);

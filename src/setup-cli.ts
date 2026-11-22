@@ -68,7 +68,7 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
       else { if (head || !isObjectId(value)) throw new Error("usage_invalid"); head = value; }
       continue;
     }
-    if (["--collect", "--recover", "--reset", "--recreate", "--finish"].includes(argument!)) {
+    if (["--collect", "--recover", "--reset", "--recreate", "--finish", "--inspect"].includes(argument!)) {
       if (writerOperation) throw new Error("operation_repeated");
       writerOperation = argument!.slice(2) as WriterOperation; continue;
     }
@@ -185,8 +185,10 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
   if (writer !== undefined) {
     if (operation === "remove" || operation === "verify") { if (writerOperation) throw new Error("usage_invalid"); writerOperation = operation; }
     else if (operation !== undefined && operation !== "apply" && operation !== "dry-run") throw new Error("usage_invalid");
+    // `--inspect` is read-only and runs at once: it takes neither `--apply` nor `--dry-run`.
+    if (writerOperation === "inspect" && operation !== undefined) throw new Error("usage_invalid");
     if (!writerOperation || modeFlags.size || targets.length || customizeSkill || codex || isolationControl || (discard && !["reset", "recreate", "remove"].includes(writerOperation)) || (baseRef && writerOperation !== "reset")) throw new Error("usage_invalid");
-    return { ...(operation ? { operation } : {}), targets, json, writer: { name: writer, operation: writerOperation, apply: operation === "apply" || operation === "remove" || operation === "verify", discard, ...(baseRef ? { baseRef } : {}) } };
+    return { ...(operation ? { operation } : {}), targets, json, writer: { name: writer, operation: writerOperation, apply: operation === "apply" || operation === "remove" || operation === "verify" || writerOperation === "inspect", discard, ...(baseRef ? { baseRef } : {}) } };
   }
   if (writerOperation) throw new Error("usage_invalid");
   if (isolationControl) {
@@ -214,4 +216,4 @@ export function parseSetupArgs(argv: readonly string[]): SetupCliRequest {
 export function formatSetupResult(setupResult: SetupResult): string {
   return JSON.stringify(setupResult);
 }
-export function formatSetupHuman(setupResult: SetupResult): string { return [`${setupResult.operation}: ${setupResult.status}`, ...setupResult.findings.map((x) => `${x.target.client}/${x.target.scope}/${x.target.alias}: ${x.status} (${x.code}${x.slot === undefined ? "" : `, slot ${x.slot}`}${x.cause === undefined ? "" : `, cause ${x.cause}`})`)].join("\n"); }
+export function formatSetupHuman(setupResult: SetupResult): string { return [`${setupResult.operation}: ${setupResult.status}`, ...setupResult.findings.map((x) => `${x.target.client}/${x.target.scope}/${x.target.alias}: ${x.status} (${x.code}${x.slot === undefined ? "" : `, slot ${x.slot}`}${x.cause === undefined ? "" : `, cause ${x.cause}`}${x.counts === undefined ? "" : `, ${Object.entries(x.counts).map(([key, value]) => `${key} ${value}`).join(", ")}`})`)].join("\n"); }
