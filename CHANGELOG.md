@@ -50,6 +50,11 @@
   [Isolation setup](docs/isolation-setup.md),
   [Execution modes](docs/execution-modes.md), [Installation](docs/installation.md)
   and the README.
+  A second page, [Agent guide to building and adopting a writer image](docs/agent-writer-image.md),
+  is for agents that do this on the owner's behalf: what needs the owner's
+  approval, the order of commands with `--json`, which setup result codes mean
+  stop or continue, and the evidence to report; it is linked from
+  [Agent guide to guided installation](docs/agent-install.md).
 
 ## 0.22.2 — 2026-11-17
 

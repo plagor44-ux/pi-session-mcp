@@ -13,6 +13,11 @@ supported artifacts. Read [Execution modes](execution-modes.md) for the full
 flag reference and [Isolation setup](isolation-setup.md) for the boundary
 prerequisites first; this guide does not repeat them.
 
+An agent that builds and adopts an image on the owner's behalf follows the
+[Agent guide to building and adopting a writer image](agent-writer-image.md). It
+lists what needs the owner's approval, the order of commands, which result codes
+mean stop and what to report.
+
 ## 1. What setup accepts
 
 `--image <value>` takes exactly one of two forms:

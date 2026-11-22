@@ -102,3 +102,7 @@ their `cause`, verification outcome and any remaining owner actions or
 reconnect required.
 Do not claim verification or a mutation that did not happen, and do not include
 credentials, complete prompts or local paths in the report.
+
+For a writer image beyond the built-in `node`, which an agent builds and adopts
+under its own approval boundaries, see the
+[Agent guide to building and adopting a writer image](agent-writer-image.md).
