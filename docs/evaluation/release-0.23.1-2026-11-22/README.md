@@ -58,7 +58,7 @@ uses. The checkout held only the version changes after the runs, and
 | `npm ci` | 0 | |
 | `npm run typecheck` | 0 | |
 | `npm run build:cli` | 0 | |
-| `NODE_OPTIONS=--unhandled-rejections=strict npm test`, first run | 1 | 202 files; 5482 tests passed, 1 failed, 15 skipped; 54.9 s; load average 2.5 at the start. The failure is `test/install-smoke.test.ts`, "ends promptly and kills a descendant that holds the server's pipes": `expect(await isAlive(holder)).toBe(false)` at line 245, after 30 polls of 100 ms |
+| `NODE_OPTIONS=--unhandled-rejections=strict npm test`, first run | 1 | 202 files; 5482 tests passed, 1 failed, 15 skipped; 54.9 s; load average 2.5 at the start. The failure is `test/install-smoke.test.ts`, "ends promptly and kills a descendant that holds the server's pipes": `expect(await isAlive(holder)).toBe(false)` at line 245, after the polling loop; the reporter showed the test at 394 ms |
 | `npx vitest run test/install-smoke.test.ts`, three times | 0 | 16 of 16 passed each time |
 | `NODE_OPTIONS=--unhandled-rejections=strict npm test`, second run | 0 | 202 files passed; 5483 tests passed, 15 skipped; 55.1 s; load average 7.0 at the start |
 | `npm run build` | 0 | |
@@ -70,9 +70,18 @@ uses. The checkout held only the version changes after the runs, and
 - The first test run failed once and the second passed, with no change between
   them. The failing test and `scripts/install-smoke.mjs` are byte-identical to
   `v0.23.0` (`git diff --stat v0.23.0 HEAD` on both printed nothing), and the
-  test passed three times in isolation. The cause was not investigated further;
-  it is a timing-sensitive wait for a descendant process to end and is not
-  related to a changed file. It is recorded here because the first run was red.
+  test passed three times in isolation. The cause was not established, and it
+  is not related to a changed file. The 394 ms of the failed test are far
+  below the 3 s that the loop of 30 polls of 100 ms takes when it uses its
+  whole budget, so the loop ended at its first or second check and a wait that
+  ran out of time under load does not explain the failure. The most likely
+  cause is a race in the test's own `isAlive` helper, which can report a
+  process that it has seen dead as alive again. That is a hypothesis; nothing
+  has been fixed. It is tracked in
+  [#322](https://github.com/plagor44-ux/pi-session-mcp/issues/322). An earlier
+  version of this record called the failure a timeout after 30 polls and the
+  test timing-sensitive under load; both statements are withdrawn. The record
+  keeps the failure because the first run was red.
 - Doctor's exit status `2` is the one that the records of `0.22.2` and
   `0.23.0` report for a run without a configuration.
 - The full run includes `test/writer-lifecycle.podman.test.ts` and

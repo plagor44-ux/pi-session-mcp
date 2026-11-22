@@ -2735,11 +2735,21 @@ carries only the version commit and the record commits.
   - The first full test run, with `NODE_OPTIONS=--unhandled-rejections=strict`,
     exited with `1`: 202 files, 5482 passed, 1 failed and 15 skipped. The
     failing test is `test/install-smoke.test.ts`, "ends promptly and kills a
-    descendant that holds the server's pipes", which waits up to 3 s for a
-    descendant process to end. The test and `scripts/install-smoke.mjs` are
+    descendant that holds the server's pipes". Its assertion
+    `expect(await isAlive(holder)).toBe(false)` failed after the polling loop
+    for the descendant. The test and `scripts/install-smoke.mjs` are
     identical to `v0.23.0`. The file passed three times in isolation, and the
     second full run exited with `0`: 202 files, 5483 passed and 15 skipped.
-    The cause of the first failure was not investigated.
+    The reporter showed the failed test at 394 ms, while a loop that used its
+    whole budget of 30 polls of 100 ms would take at least 3 s: the loop ended
+    at its first or second check, so a wait that ran out of time under load
+    does not explain the failure. The cause was not established. The most
+    likely one is a race in the test's own `isAlive` helper, which can report a
+    process that it has seen dead as alive again; this is a hypothesis, not a
+    result, and nothing has been fixed. It is tracked in
+    [#322](https://github.com/plagor44-ux/pi-session-mcp/issues/322). An
+    earlier version of this record called the failure a timeout after 30 polls
+    and the test timing-sensitive under load; both statements are withdrawn.
   - `npm audit` and `npm audit --omit=dev` both exited with `0` and reported 0
     vulnerabilities.
   - Doctor reported `packageVersion` `0.23.1`. It exited with `2` because no
