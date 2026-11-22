@@ -88,7 +88,7 @@ clone.
 | `--writers N` | 1–16; default 1 |
 | `--lifecycle <value>` | `persistent` (default) or `ephemeral` |
 | `--profiles a,b` | Required non-empty coding-profile aliases; no Cursor provider |
-| `--image <value>` | `node` (default, built-in digest pin) or an existing local 64-character lowercase hex image ID; no arbitrary tags |
+| `--image <value>` | `node` (default, built-in digest pin) or an existing local 64-character lowercase hex image ID; no arbitrary tags ([how to build an image](writer-images.md)) |
 | `--network <value>` | `pasta` (default, not limited) or `none` |
 | `--tags <value>` | `none` (default), or `reachable` for the tags reachable from the selected base commit |
 | `--clean <untracked\|all>` | `untracked` (default) keeps ignored files; `all` also removes ignored files on reset and finish |
@@ -729,7 +729,8 @@ This records `cache: "go"` in the container entry in `execution-modes.json`.
 The Go cache mounts at `/pi/go` with GOPATH, GOCACHE and `GOTOOLCHAIN=local`.
 Container options are rebuilt from supplied values and defaults each time:
 repeat the image ID and `--cache go` on later mode requests, or cache defaults
-to `none`. Setup does not build or install the Go toolchain for you.
+to `none`. Setup does not build or install the Go toolchain for you; see
+[Building a custom writer image](writer-images.md).
 
 A Python writer using uv and npm uses the same pattern with `--cache uv`:
 

@@ -10,6 +10,8 @@ Code, and covers configuration changes, upgrades and removal. Related documents:
   repository; automated Linux container writers, readiness, collection and finish.
 - [Isolation setup](isolation-setup.md): rootless Podman prerequisites, what setup
   automates and migration from hand-made writers.
+- [Building a custom writer image](writer-images.md): an image beyond the built-in
+  `node`, such as one with Go, Python with uv or Bun.
 
 ## Guided installation
 
