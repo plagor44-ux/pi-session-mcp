@@ -431,11 +431,19 @@ export interface InspectCounts {
 export type InspectOutcome = WriterOutcome & { counts?: InspectCounts };
 
 /**
- * Counters for `inspectWriter`, from a second read-only boundary run: the clone is mounted read-only and Git works on a
- * copy of the index under `/tmp`, prepared as `worktreeIndexScript` does: the flags are cleared so that no changed path stays hidden,
- * a path deleted in the worktree leaves the index (so the index-versus-HEAD diff counts the deletion; the staged paths are also taken
- * before that, so a new file that is staged and then deleted still counts), and a path that is still absent keeps its skip-worktree flag because a sparse checkout left it out on purpose. Each list is written to a file first, so a failing Git command fails the script instead
- * of counting zero. Paths stay NUL-separated and are only counted, never read back.
+ * Counters for `inspectWriter`, from a second read-only boundary run: the clone is mounted read-only and Git works on a copy of
+ * the index under `/tmp`. Each list is written to a file first, so a failing Git command fails the script instead of counting
+ * zero. Paths stay NUL-separated and are only counted, never read back.
+ *
+ * `changes` is the union (each path once) of three lists, each with one derivation:
+ * 1. `staged`: the index as the clone has it, against HEAD. Taken first, before the copy is touched, so staged work shows
+ *    whatever the worktree looks like (a new file staged and then deleted, a change restored in the worktree).
+ * 2. `deleted`: tracked paths that are missing from the worktree, with assume-unchanged cleared so that flag hides none of them.
+ *    Git leaves out a skip-worktree path here: a sparse checkout left it out on purpose, so it is no deletion.
+ * 3. `worktree`: present files against the index, on a copy where both hiding flags are cleared (so a changed file that
+ *    assume-unchanged or skip-worktree hides shows) and the paths of list 2 are removed and the paths that are still absent get
+ *    skip-worktree back (so neither counts here a second time). This is how `worktreeIndexScript` prepares the same index.
+ * `untracked` and `ignored` count files that Git lists as others; they are not `changes`.
  */
 const COUNT_SCRIPT = `set -eu
 export GIT_CONFIG_NOSYSTEM=1
@@ -444,17 +452,16 @@ export GIT_INDEX_FILE=/tmp/index
 count() { tr -cd '\\0' < "$1" | wc -c | tr -d ' '; }
 lines() { wc -l < "$1" | tr -d ' '; }
 ${BOUNDARY_GIT} rev-list --count --branches HEAD --not "$1" > /tmp/commits
+${INDEX_GIT} diff-index --cached --no-renames --name-only -z HEAD > /tmp/staged
 ${INDEX_GIT} ls-files -z > /tmp/all-paths
 ${INDEX_GIT} update-index -z --no-assume-unchanged --stdin < /tmp/all-paths
-${INDEX_GIT} diff-index --cached --name-only -z HEAD > /tmp/staged-original
-${INDEX_GIT} ls-files -z --deleted > /tmp/deleted-paths
+${INDEX_GIT} ls-files -z --deleted > /tmp/deleted
 ${INDEX_GIT} update-index -z --no-skip-worktree --stdin < /tmp/all-paths
-${INDEX_GIT} update-index -z --force-remove --stdin < /tmp/deleted-paths
-${INDEX_GIT} ls-files -z --deleted > /tmp/absent-paths
-${INDEX_GIT} update-index -z --skip-worktree --stdin < /tmp/absent-paths
-${INDEX_GIT} diff-index --cached --name-only -z HEAD > /tmp/staged-prepared
-${INDEX_GIT} diff --no-ext-diff --no-textconv --name-only -z > /tmp/worktree-changes
-cat /tmp/staged-original /tmp/staged-prepared /tmp/worktree-changes | sort -z -u > /tmp/changes
+${INDEX_GIT} update-index -z --force-remove --stdin < /tmp/deleted
+${INDEX_GIT} ls-files -z --deleted > /tmp/absent
+${INDEX_GIT} update-index -z --skip-worktree --stdin < /tmp/absent
+${INDEX_GIT} diff --no-ext-diff --no-textconv --no-renames --name-only -z > /tmp/worktree
+cat /tmp/staged /tmp/deleted /tmp/worktree | sort -z -u > /tmp/changes
 ${BOUNDARY_GIT} ls-files -z --others --exclude-standard > /tmp/untracked
 ${BOUNDARY_GIT} ls-files -z --others --ignored --exclude-standard > /tmp/ignored
 if ${BOUNDARY_GIT} rev-parse -q --verify refs/stash > /dev/null; then ${BOUNDARY_GIT} rev-list --walk-reflogs refs/stash > /tmp/stashes; else : > /tmp/stashes; fi
