@@ -31,8 +31,9 @@ part in a sign-in, also not by running the command on a pseudo-terminal. See [pr
   to run `pi-session-mcp-provider auth login <provider>` or
   `pi-session-mcp-provider auth set <provider>` on their own terminal, then
   re-check. Do not handle credentials.
-- **Existing configuration:** show the intended merge and ask before approving
-  changes. Set `allowConfigChange` only with that approval.
+- **Existing configuration:** run the dry run with `allowConfigChange` set to
+  `false`, show the owner its `changes` list ([Preview for the owner](#preview-for-the-owner))
+  and ask before approving. Set `allowConfigChange` only with that approval.
 - **Divergent registration:** stop and ask; never replace it automatically.
   An `upgrade_required` finding also stops the run; follow the owner-approved
   [upgrade procedure](installation.md#upgrade), not the installer.
@@ -171,7 +172,7 @@ the run).
 | `config_not_regular` | The configuration or routing file is not a regular file; nothing changed | ask |
 | `provider_login_required` | A provider has no login; the target alias is the provider | ask: the owner signs in |
 | `model_unknown` | A new profile names a model that the provider's catalog lacks | ask |
-| `config_change_not_allowed` | The existing configuration or routing file would change and `allowConfigChange` is `false`. | ask: show the owner what would change |
+| `config_change_not_allowed` | The existing configuration or routing file would change and `allowConfigChange` is `false`. The dry run still returns the preview ([Preview for the owner](#preview-for-the-owner)) | ask: show the preview |
 | `probes_not_approved` | An apply would probe new profiles and `approveProbes` is `false` | ask: the owner approves provider turns |
 | `host_writes_not_accepted` | A `host` workspace without `acceptHostWrites: true` | ask |
 | `container_profiles_invalid` | A container workspace names no profiles, or a profile that is not a coding profile | ask |
@@ -216,12 +217,60 @@ pi-session-mcp-setup --guided --answers /path/to/answers.json --json
 pi-session-mcp-setup --guided --apply --answers /path/to/answers.json --json
 ```
 
-The first command is a dry run; inspect findings and obtain approvals before
-changing the file and applying. `--config /path/to/config.json` may override the
+The first command is a dry run; inspect findings and the `changes` preview and
+obtain approvals before changing the file and applying. `--config /path/to/config.json` may override the
 guided configuration location. Without a terminal, an answers file is required.
 Setup checks authentication, validates a candidate, probes approved new
 profiles, merges configuration, provisions modes, registers clients and verifies.
 It preserves fields it does not own, and never replaces divergent registrations.
+
+### Preview for the owner
+
+The dry run's report carries a `changes` list: the preview that you show the
+owner before they approve `allowConfigChange`. With `--json` it is the
+top-level field `changes`; in the human format each entry is a line
+`change: <file> <kind> <path>`. It is present on a planned dry run and on a dry
+run that ends with `config_change_not_allowed`. To get the preview before the
+owner approves, keep `"allowConfigChange": false` in the answers file: the dry
+run then ends with `config_change_not_allowed` and the preview, and changes
+nothing. An apply report has no `changes`.
+
+```json
+{
+  "operation": "dry-run", "status": "failed", "exitCode": 1,
+  "findings": [{ "target": { "client": "guided", "scope": "plan", "alias": "installation" }, "status": "failed", "code": "config_change_not_allowed" }],
+  "changes": [
+    { "file": "config", "kind": "add", "path": "executionProfiles.review-medium" },
+    { "file": "config", "kind": "add", "path": "workspaces.project" },
+    { "file": "config", "kind": "change", "path": "history.enabled" },
+    { "file": "routing", "kind": "add", "path": "tiers.medium.review" },
+    { "file": "modes", "kind": "change", "path": "workspaces.project" },
+    { "file": "client", "kind": "change", "path": "claude-code.pi-session-mcp" }
+  ]
+}
+```
+
+Each entry has a `file` (`config`, `routing`, `modes` or `client`), a `kind`
+(`add`, `change` or `remove`) and a `path` of field names and aliases separated
+by dots. The list never contains a value (provider, model, workspace path,
+image, key) or a filesystem path, and neither may your summary to the owner.
+Read it like this:
+
+- `config` and `routing`: the keys that the answers would add to, change in or
+  remove from the existing file, compared with the file as it is now.
+  `executionProfiles.<alias>` and `workspaces.<alias>` are new entries of that
+  alias; `history.enabled` and `events.delivery` are fields; `tiers.<tier>.<role>`
+  and `families.<alias>` are routing assignments. Keys that the answers leave
+  as they are do not appear, so an installation that is already in place lists
+  no `config` or `routing` entry.
+- `modes`: the workspace whose execution mode the answers set. The dry run does
+  not compare it with the current mode, so the kind is always `change`.
+- `client`: the client registration (`<client>.pi-session-mcp`) that the answers
+  would make or keep. Probes of new profiles are `probe_planned` findings, not
+  entries.
+
+The preview comes before the other checks of a dry run: a provider login that
+is missing is reported only once the plan is accepted.
 
 Report the dry-run and apply status, sanitized findings, dropped profiles with
 their `cause`, verification outcome and any remaining owner actions or

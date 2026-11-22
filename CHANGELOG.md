@@ -27,6 +27,17 @@
   be read is the new code `answers_unreadable`. `docs/agent-install.md` now
   documents the complete answers format and every guided result code.
 
+- The guided dry run reports a path-free, value-free preview of what it would
+  change ([#319](https://github.com/plagor44-ux/pi-session-mcp/issues/319)):
+  a top-level `changes` list in `--json` (and `change:` lines in the human
+  report) with the file kind (`config`, `routing`, `modes`, `client`), the kind
+  of change (`add`, `change`, `remove`) and a key path of field names and
+  aliases. It is also returned when the dry run ends with
+  `config_change_not_allowed`, so the agent can show it to the owner before
+  `allowConfigChange` is set. The report stays at schema version 1; the field is
+  additive and optional, and apply reports do not carry it.
+  `docs/agent-install.md` describes it as the owner's preview.
+
 ### Changed
 
 - **Exit status:** `answers_invalid` and the new `answers_unreadable` exit with

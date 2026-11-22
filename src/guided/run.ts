@@ -7,9 +7,9 @@ import { CATALOG_ID_PATTERN, type PricedModelCatalog } from "../model-catalog.js
 import { routingConfigPath, writeRoutingDocument } from "../routing/config.js";
 import type { ModeRequest } from "../setup-modes.js";
 import type { ProbeReport } from "../setup-probe-result.js";
-import { result, type SetupFinding, type SetupResult, type SetupStatus, type SetupTarget } from "../setup-result.js";
+import { result, type SetupChange, type SetupFinding, type SetupResult, type SetupStatus, type SetupTarget } from "../setup-result.js";
 import type { GuidedAnswers } from "./answers.js";
-import { buildGuidedPlan, GuidedPlanError } from "./plan.js";
+import { buildGuidedPlan, GuidedPlanError, plannedChanges } from "./plan.js";
 
 export interface GuidedDependencies {
   configPath: string;
@@ -75,9 +75,9 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
   const add = (scope: string, alias: string, code: string, status: SetupStatus = "unchanged", cause?: string): void => {
     findings.push({ target: { client: "guided", scope, alias }, status, code, ...(cause === undefined ? {} : { cause }) });
   };
-  const stop = (code: string, scope = "plan", alias = "installation", cause?: string): SetupResult => {
+  const stop = (code: string, scope = "plan", alias = "installation", cause?: string, changes?: readonly SetupChange[]): SetupResult => {
     add(scope, alias, code, "failed", cause);
-    return result(operation, findings, "failed", code === "operation_interrupted" ? deps.signal?.reason === 143 ? 143 : 130 : 1);
+    return result(operation, findings, "failed", code === "operation_interrupted" ? deps.signal?.reason === 143 ? 143 : 130 : 1, changes);
   };
   const check = (): void => { if (deps.signal?.aborted) throw new Error("operation_interrupted"); };
   const project = (report: SetupResult, scope: string, alias: string): boolean => {
@@ -86,6 +86,8 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
   };
   const candidate = `${deps.configPath}.guided-candidate.json`;
   let claim: string | undefined;
+  // The documents the plan was built from, for the preview of a dry run that the plan's own refusal ends.
+  let documents: { config?: unknown; routing?: unknown } = {};
   try {
     check();
     for (const [alias, path] of [["config", deps.configPath], ["routing", routingConfigPath(deps.configPath)]] as const) {
@@ -94,7 +96,8 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
     }
     const existingConfig = await readOptional(deps.configPath);
     const existingRouting = await readOptional(routingConfigPath(deps.configPath));
-    const plan = buildGuidedPlan(request.answers, { ...(existingConfig === undefined ? {} : { config: existingConfig }), ...(existingRouting === undefined ? {} : { routing: existingRouting }) });
+    documents = { ...(existingConfig === undefined ? {} : { config: existingConfig }), ...(existingRouting === undefined ? {} : { routing: existingRouting }) };
+    const plan = buildGuidedPlan(request.answers, documents);
     plan.routingDocument = structuredClone(plan.routingDocument);
     const optional = await deps.optionalFeatures(); check();
     if (!optional.podman) add("prerequisites", "podman", "podman_unavailable");
@@ -119,7 +122,7 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
       for (const alias of plan.newProfiles) add("profiles", alias, "probe_planned", "planned");
       for (const mode of plan.modeRequests) add("modes", mode.alias, "mode_planned", "planned");
       for (const target of plan.targets) add("registrations", target.client, "registration_planned", "planned");
-      return result(operation, findings, "planned");
+      return result(operation, findings, "planned", 0, plannedChanges(plan, documents));
     }
     // A dry run reports planned probes; only an apply needs the owner's approval to spend.
     if (plan.newProfiles.length && !request.answers.approveProbes) return stop("probes_not_approved", "profiles");
@@ -222,7 +225,10 @@ export async function runGuided(request: { apply: boolean; answers: GuidedAnswer
     }
     return result(operation, findings);
   } catch (error) {
-    return stop(deps.signal?.aborted ? "operation_interrupted" : error instanceof GuidedPlanError ? error.code : "operation_failed");
+    // The owner approves `allowConfigChange` on the strength of the preview, so a dry run refused for that reason still carries it.
+    const preview = !request.apply && !deps.signal?.aborted && error instanceof GuidedPlanError && error.plan !== undefined
+      ? plannedChanges(error.plan, documents) : undefined;
+    return stop(deps.signal?.aborted ? "operation_interrupted" : error instanceof GuidedPlanError ? error.code : "operation_failed", "plan", "installation", undefined, preview);
   } finally {
     if (claim) {
       try { await rm(candidate, { force: true }); }

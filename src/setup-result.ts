@@ -9,6 +9,16 @@ export interface SetupTarget {
   readonly alias: string;
 }
 
+/** One planned change of a guided dry run: where (file kind and key path made of field names and aliases) and what, never a value. */
+export interface SetupChange {
+  readonly file: "config" | "routing" | "modes" | "client";
+  readonly kind: "add" | "change" | "remove";
+  readonly path: string;
+}
+const CHANGE_FILES: readonly string[] = ["config", "routing", "modes", "client"];
+const CHANGE_KINDS: readonly string[] = ["add", "change", "remove"];
+const CHANGE_PATH = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}(?:\.[A-Za-z0-9][A-Za-z0-9_-]{0,63}){0,5}$/;
+
 export interface SetupFinding {
   readonly target: SetupTarget;
   readonly status: SetupStatus;
@@ -37,6 +47,8 @@ export interface SetupResult {
   readonly status: SetupStatus;
   readonly findings: readonly SetupFinding[];
   readonly exitCode: 0 | 1 | 64 | 130 | 143;
+  /** The planned changes of a guided dry run; absent when there are none to show. */
+  readonly changes?: readonly SetupChange[];
 }
 
 export function result(
@@ -44,7 +56,10 @@ export function result(
   findings: readonly SetupFinding[],
   status: SetupStatus = findings.some((finding) => finding.status === "failed" || finding.status === "divergent" || finding.status === "unsupported") ? "failed" : "ok",
   exitCode: 0 | 1 | 64 | 130 | 143 = status === "failed" ? 1 : 0,
+  changes?: readonly SetupChange[],
 ): SetupResult {
+  // An entry that is not a plain file kind, change kind and dotted key path is left out, so no value or path can pass through it.
+  const reported = (changes ?? []).filter((change) => CHANGE_FILES.includes(change.file) && CHANGE_KINDS.includes(change.kind) && CHANGE_PATH.test(change.path)).map((change) => Object.freeze({ file: change.file, kind: change.kind, path: change.path }));
   const normalized = findings.map((finding) => { const counts = sanitizedCounts(finding.counts); return Object.freeze({
     target: Object.freeze({ ...finding.target }),
     status: finding.status,
@@ -54,5 +69,5 @@ export function result(
     ...(finding.cause !== undefined && CODE_PATTERN.test(finding.cause) ? { cause: finding.cause } : {}),
     ...(counts === undefined ? {} : { counts }),
   }); });
-  return Object.freeze({ schemaVersion: 1, operation, status, findings: Object.freeze(normalized), exitCode });
+  return Object.freeze({ schemaVersion: 1, operation, status, findings: Object.freeze(normalized), exitCode, ...(reported.length === 0 ? {} : { changes: Object.freeze(reported) }) });
 }
