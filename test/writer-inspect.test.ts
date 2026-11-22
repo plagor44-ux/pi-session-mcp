@@ -31,6 +31,14 @@ it("reports commits, a second branch, tracked changes, untracked and ignored fil
   expect(outcome).toEqual({ status: "failed", code: "writer_uncollected", counts: { ...ZERO, commits: 2, branches: 1, stashes: 1, changes: 1, untracked: 1, ignored: 2 } });
 }, 60_000);
 
+it("counts commits on a detached HEAD that no branch reaches", async () => {
+  const f = await fixture();
+  await f.work("checkout", "--detach", "main");
+  await f.commit("detached one", "one.txt", "1\n");
+  await f.commit("detached two", "two.txt", "2\n");
+  expect(await inspectWriter(f.ctx, "repo-w1")).toEqual({ status: "failed", code: "writer_uncollected", counts: { ...ZERO, commits: 2 } });
+}, 60_000);
+
 it("counts ignored files of a clean writer without calling it dirty", async () => {
   const f = await fixture();
   await appendFile(join(f.paths.clone, ".git/info/exclude"), "node_modules/\n");

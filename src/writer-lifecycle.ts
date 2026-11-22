@@ -413,7 +413,7 @@ export async function inspectWork(ctx: WriterContext, name: string): Promise<{
 
 /** Path-free counters of what a clone holds beyond its recorded base (see `inspectWriter`). */
 export interface InspectCounts {
-  /** Commits on any local branch that the recorded base does not contain. */
+  /** Commits on any local branch or on HEAD (a detached one included) that the recorded base does not contain. */
   commits: number;
   /** Local branches other than the recorded base branch. */
   branches: number;
@@ -441,7 +441,7 @@ cp .git/index /tmp/index
 export GIT_INDEX_FILE=/tmp/index
 count() { tr -cd '\\0' < "$1" | wc -c | tr -d ' '; }
 lines() { wc -l < "$1" | tr -d ' '; }
-${BOUNDARY_GIT} rev-list --count --branches --not "$1" > /tmp/commits
+${BOUNDARY_GIT} rev-list --count --branches HEAD --not "$1" > /tmp/commits
 ${BOUNDARY_GIT} diff --no-ext-diff --no-textconv -z --name-only HEAD > /tmp/changes
 ${BOUNDARY_GIT} ls-files -z --others --exclude-standard > /tmp/untracked
 ${BOUNDARY_GIT} ls-files -z --others --ignored --exclude-standard > /tmp/ignored

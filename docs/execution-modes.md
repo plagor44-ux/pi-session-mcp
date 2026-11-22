@@ -321,7 +321,7 @@ The finding carries path-free counters:
 
 | Counter | Counts |
 | --- | --- |
-| `commits` | Commits on any local branch that the recorded base does not contain |
+| `commits` | Commits on any local branch or on `HEAD` (a detached `HEAD` included) that the recorded base does not contain |
 | `branches` | Local branches other than the recorded base branch |
 | `stashes` | Stash entries |
 | `unexportedRefs` | Tags, notes and other refs whose objects the operator checkout does not hold |
